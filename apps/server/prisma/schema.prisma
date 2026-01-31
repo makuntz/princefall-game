@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Auth identities (OAuth)
+  authIdentities AuthIdentity[]
+  
+  // Games
+  whiteGames Game[] @relation("WhitePlayer")
+  blackGames Game[] @relation("BlackPlayer")
+  
+  // Moves
+  moves GameMove[]
+  
+  // Rating
+  rating Rating?
+}
+
+model AuthIdentity {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String   // "google", "email", etc
+  providerId String  // ID no provider
+  email     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([userId])
+}
+
+model Game {
+  id            String    @id @default(cuid())
+  whitePlayerId String
+  blackPlayerId String?
+  status        String    @default("waiting") // waiting | setup | playing | finished
+  currentTurn   String    @default("white") // white | black
+  moveNumber    Int       @default(0)
+  winnerId      String?
+  inviteCode    String    @unique
+  gameState     Json      // SerializedGameState
+  version       Int       @default(1) // Para controle de concorrência
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  finishedAt    DateTime?
+
+  whitePlayer User @relation("WhitePlayer", fields: [whitePlayerId], references: [id])
+  blackPlayer User? @relation("BlackPlayer", fields: [blackPlayerId], references: [id])
+  
+  moves GameMove[]
+
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+  @@index([status])
+  @@index([inviteCode])
+}
+
+model GameMove {
+  id         String   @id @default(cuid())
+  gameId     String
+  moveNumber Int
+  playerId   String
+  from       String   // "A1"
+  to         String   // "B2"
+  promotion  String?
+  isSwap     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  game   Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player User @relation(fields: [playerId], references: [id])
+
+  @@unique([gameId, moveNumber]) // Previne duplicação
+  @@index([gameId])
+  @@index([playerId])
+}
+
+model Rating {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  rating      Int      @default(1500) // Elo inicial
+  gamesPlayed Int      @default(0)
+  wins        Int      @default(0)
+  losses      Int      @default(0)
+  draws       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rating]) // Para leaderboard
+}
+
