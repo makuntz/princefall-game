@@ -47,7 +47,7 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame }: Game
     <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
       <h1 style={{ marginBottom: '2rem' }}>Minhas Partidas</h1>
 
-      <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
+      <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <button
           onClick={onCreateGame}
           style={{
@@ -60,7 +60,24 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame }: Game
             fontWeight: 'bold',
           }}
         >
-          Nova Partida
+          Nova Partida Online
+        </button>
+        <button
+          onClick={() => {
+            const event = new CustomEvent('startLocalGame');
+            window.dispatchEvent(event);
+          }}
+          style={{
+            padding: '0.75rem 1.5rem',
+            borderRadius: '4px',
+            border: 'none',
+            background: '#4CAF50',
+            color: '#fff',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+        >
+          🎮 Jogar Local (Teste)
         </button>
 
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>

@@ -27,7 +27,7 @@ export class GameService {
         whitePlayerId,
         status: 'waiting',
         inviteCode,
-        gameState: serializeState(initialState),
+        gameState: serializeState(initialState) as any,
         version: 1,
       },
       include: {
@@ -104,8 +104,15 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      if (game.status !== 'setup') {
+      // Permitir setup quando status é 'waiting' (jogador branco) ou 'setup' (ambos podem fazer setup)
+      if (game.status !== 'setup' && game.status !== 'waiting') {
         return { success: false, error: 'Game not in setup phase' };
+      }
+      
+      // Se status é 'waiting', significa que só o jogador branco entrou
+      // Nesse caso, só o jogador branco pode fazer setup
+      if (game.status === 'waiting' && playerColor !== 'white') {
+        return { success: false, error: 'Waiting for second player to join' };
       }
 
       const gameState = deserializeState(game.gameState as any);
@@ -129,11 +136,14 @@ export class GameService {
       const serialized = serializeState(newState);
 
       // Atualizar jogo
+      // Se estava 'waiting', mudar para 'setup' (ou 'playing' se ambos já escolheram)
+      const newStatus = game.status === 'waiting' ? (newState.status === 'playing' ? 'playing' : 'setup') : newState.status;
+      
       const updatedGame = await tx.game.update({
         where: { id: gameId },
         data: {
-          gameState: serialized,
-          status: newState.status,
+          gameState: serialized as any,
+          status: newStatus,
           currentTurn: newState.currentTurn,
           version: game.version + 1,
         },
@@ -227,19 +237,31 @@ export class GameService {
         return { success: false, error: 'Not your turn' };
       }
 
-      // Aplicar movimento usando game-core
-      const action: GameAction = {
-        type: 'MOVE',
-        payload: {
-          move: {
-            from: moveData.from,
-            to: moveData.to,
-            promotion: moveData.promotion as any,
-            isSwap: moveData.isSwap,
+      // Se for swap, usar ação SWAP_KING_PRINCE
+      let action: GameAction;
+      if (moveData.isSwap) {
+        action = {
+          type: 'SWAP_KING_PRINCE',
+          payload: {
+            swapFrom: moveData.from,
+            swapTo: moveData.to,
           },
-        },
-        playerColor,
-      };
+          playerColor,
+        };
+      } else {
+        action = {
+          type: 'MOVE',
+          payload: {
+            move: {
+              from: moveData.from,
+              to: moveData.to,
+              promotion: moveData.promotion as any,
+              isSwap: false,
+            },
+          },
+          playerColor,
+        };
+      }
 
       const newState = applyAction(gameState, action);
 
