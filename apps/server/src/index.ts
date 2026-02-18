@@ -14,7 +14,10 @@ const fastify = Fastify({
 
 // Plugins
 fastify.register(cors, {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN 
+    ? process.env.CORS_ORIGIN.split(',')
+    : ['http://localhost:3000'],
+  credentials: true,
 });
 
 fastify.register(jwt, {

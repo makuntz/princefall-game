@@ -122,7 +122,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
       fastify.prisma,
       id,
       userId,
-      position
+      { col: position.col, row: position.row as any }
     );
 
     if (!result.success) {
@@ -138,12 +138,18 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const moveData = submitMoveSchema.parse(request.body);
 
-    const result = await gameService.submitMove(
-      fastify.prisma,
-      id,
-      userId,
-      moveData
-    );
+      const result = await gameService.submitMove(
+        fastify.prisma,
+        id,
+        userId,
+        {
+          from: { col: moveData.from.col, row: moveData.from.row as any },
+          to: { col: moveData.to.col, row: moveData.to.row as any },
+          promotion: moveData.promotion,
+          isSwap: moveData.isSwap,
+          moveNumber: moveData.moveNumber,
+        }
+      );
 
     if (!result.success) {
       return reply.code(400).send({ error: result.error });

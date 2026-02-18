@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { GameBoard } from './components/GameBoard';
+import { GameBoard } from './components/game/GameBoard';
 import { Login } from './components/Login';
 import { GameList } from './components/GameList';
+import { LocalGame } from './components/LocalGame';
 import { api } from './api';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
-  const [view, setView] = useState<'login' | 'list' | 'game'>('login');
+  const [view, setView] = useState<'login' | 'list' | 'game' | 'local'>('login');
 
   useEffect(() => {
     if (token) {
@@ -21,6 +22,13 @@ function App() {
           setToken(null);
         });
     }
+
+    // Listener para modo local
+    const handleLocalGame = () => {
+      setView('local');
+    };
+    window.addEventListener('startLocalGame', handleLocalGame);
+    return () => window.removeEventListener('startLocalGame', handleLocalGame);
   }, [token]);
 
   const handleLogin = (email: string) => {
@@ -88,6 +96,10 @@ function App() {
         onBack={() => setView('list')}
       />
     );
+  }
+
+  if (view === 'local') {
+    return <LocalGame onBack={() => setView('list')} />;
   }
 
   return null;
