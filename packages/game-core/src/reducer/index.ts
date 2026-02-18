@@ -75,7 +75,8 @@ function applySetupGeneral(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  const { position, playerColor } = action.payload;
+  const { position } = action.payload;
+  const { playerColor } = action;
   if (!position) {
     return state;
   }
@@ -130,7 +131,8 @@ function applyMove(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  const { move, playerColor } = action.payload;
+  const { move } = action.payload;
+  const { playerColor } = action;
   if (!move) {
     return state;
   }
@@ -169,7 +171,7 @@ function applyMove(state: GameState, action: GameAction): GameState {
   setPieceAt(newBoard, move.to, movedPiece);
 
   // Verificar se capturou príncipe (game over)
-  let newStatus = state.status;
+  let newStatus: 'playing' | 'finished' = state.status;
   let winner: Color | undefined;
   let endedAt: number | undefined;
 
@@ -203,7 +205,8 @@ function applySwapKingPrince(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  const { swapFrom, swapTo, playerColor } = action.payload;
+  const { swapFrom, swapTo } = action.payload;
+  const { playerColor } = action;
   if (!swapFrom || !swapTo) {
     return state;
   }

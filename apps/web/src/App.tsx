@@ -4,14 +4,7 @@ import { Login } from './components/Login';
 import { GameList } from './components/GameList';
 import { api } from './api';
 
-interface User {
-  id: string;
-  email: string;
-  username: string;
-}
-
 function App() {
-  const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
   const [view, setView] = useState<'login' | 'list' | 'game'>('login');
@@ -20,8 +13,7 @@ function App() {
     if (token) {
       // Verificar se token é válido
       api.get('/auth/me', { token })
-        .then((res) => {
-          setUser(res.user);
+        .then(() => {
           setView('list');
         })
         .catch(() => {
@@ -35,7 +27,6 @@ function App() {
     api.post('/auth/login', { email })
       .then((res) => {
         setToken(res.token);
-        setUser(res.user);
         localStorage.setItem('token', res.token);
         setView('list');
       })

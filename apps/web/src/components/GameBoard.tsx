@@ -115,7 +115,7 @@ export function GameBoard({ gameId, token, onBack }: GameBoardProps) {
       >
         {rows.map((row) =>
           columns.map((col) => {
-            const pos: Position = { col: col as any, row };
+            const pos: Position = { col: col as any, row: row as Position['row'] };
             const key = positionToString(pos);
             const piece = gameState.board.get(key);
             const isSelected = selectedPos && selectedPos.col === col && selectedPos.row === row;
