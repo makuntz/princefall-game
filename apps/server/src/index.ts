@@ -13,10 +13,17 @@ const fastify = Fastify({
 });
 
 // Plugins
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : [
+      'http://localhost:3000',
+      'http://localhost:5173', // Vite dev server padrão
+      'https://princefall-game-c4i256t2p-makuntzs-projects.vercel.app',
+    ];
+
 fastify.register(cors, {
-  origin: process.env.CORS_ORIGIN 
-    ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:3000'],
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 });
 
