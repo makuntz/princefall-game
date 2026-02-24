@@ -44,30 +44,34 @@ function App() {
       });
   };
 
-  const handleCreateGame = () => {
-    if (!token) return;
-    api.post('/games', {}, { token })
-      .then((res) => {
-        setCurrentGameId(res.game.id);
-        setView('game');
-      })
-      .catch((err) => {
-        console.error('Create game error:', err);
-        alert('Erro ao criar partida');
-      });
+  const handleCreateGame = async () => {
+    if (!token) {
+      console.warn('Cannot create game: no token');
+      return;
+    }
+    try {
+      const res = await api.post('/games', {}, { token });
+      setCurrentGameId(res.game.id);
+      setView('game');
+    } catch (err) {
+      console.error('Create game error:', err);
+      alert('Erro ao criar partida');
+    }
   };
 
-  const handleJoinGame = (gameId: string, inviteCode: string) => {
-    if (!token) return;
-    api.post(`/games/${gameId}/join`, { inviteCode }, { token })
-      .then(() => {
-        setCurrentGameId(gameId);
-        setView('game');
-      })
-      .catch((err) => {
-        console.error('Join game error:', err);
-        alert('Erro ao entrar na partida');
-      });
+  const handleJoinGame = async (gameId: string, inviteCode: string) => {
+    if (!token) {
+      console.warn('Cannot join game: no token');
+      return;
+    }
+    try {
+      await api.post(`/games/${gameId}/join`, { inviteCode }, { token });
+      setCurrentGameId(gameId);
+      setView('game');
+    } catch (err) {
+      console.error('Join game error:', err);
+      alert('Erro ao entrar na partida');
+    }
   };
 
   if (view === 'login') {
@@ -102,7 +106,13 @@ function App() {
     return <LocalGame onBack={() => setView('list')} />;
   }
 
-  return null;
+  // Fallback: should not reach here, but provide a safe default
+  return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <p>Estado inválido. Por favor, recarregue a página.</p>
+      <button onClick={() => setView('login')}>Voltar ao Login</button>
+    </div>
+  );
 }
 
 export default App;
