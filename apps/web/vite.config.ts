@@ -17,6 +17,13 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     minify: 'esbuild',
+    commonjsOptions: {
+      include: [/game-core/, /node_modules/],
+      transformMixedEsModules: true,
+    },
+  },
+  optimizeDeps: {
+    include: ['@princefall/game-core'],
   },
 });
 
