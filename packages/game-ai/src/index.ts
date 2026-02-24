@@ -6,7 +6,7 @@
  * Por enquanto, apenas define as interfaces.
  */
 
-export * from './types';
+export type * from './types';
 
 // TODO V2: Implementar bots com diferentes níveis
 // - Easy: Movimentos aleatórios legais
