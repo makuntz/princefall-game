@@ -19,48 +19,92 @@ interface GameListProps {
 export function GameList({ token, onCreateGame, onJoinGame, onSelectGame }: GameListProps) {
   const [games, setGames] = useState<Game[]>([]);
   const [joinCode, setJoinCode] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     loadGames();
+    // Atualizar lista a cada 5 segundos
+    const interval = setInterval(loadGames, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadGames = async () => {
     try {
+      setError(null);
       const res = await api.get('/games', { token });
-      setGames(res.games);
+      setGames(res.games || []);
     } catch (err) {
       console.error('Error loading games:', err);
+      setError('Erro ao carregar partidas');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleJoinByCode = () => {
-    // Tentar encontrar jogo pelo código
-    const game = games.find((g) => g.inviteCode === joinCode.toUpperCase());
-    if (game) {
-      onJoinGame(game.id, joinCode.toUpperCase());
-    } else {
-      alert('Código inválido');
+  const handleCreateGame = async () => {
+    setCreating(true);
+    try {
+      await onCreateGame();
+    } catch (err) {
+      console.error('Error creating game:', err);
+      alert('Erro ao criar partida');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleJoinByCode = async () => {
+    if (!joinCode.trim()) {
+      alert('Por favor, insira um código de convite');
+      return;
+    }
+
+    setJoining(true);
+    try {
+      const code = joinCode.toUpperCase().trim();
+      const game = games.find((g) => g.inviteCode === code);
+      if (game) {
+        await onJoinGame(game.id, code);
+      } else {
+        alert('Código inválido. Verifique o código e tente novamente.');
+      }
+    } catch (err) {
+      console.error('Error joining game:', err);
+      alert('Erro ao entrar na partida');
+    } finally {
+      setJoining(false);
     }
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '2rem' }}>Minhas Partidas</h1>
+    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', minHeight: '100vh', background: '#1a1a1a' }}>
+      <h1 style={{ marginBottom: '2rem', color: '#fff' }}>Minhas Partidas</h1>
+
+      {error && (
+        <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#ff4444', color: '#fff', borderRadius: '4px' }}>
+          {error}
+        </div>
+      )}
 
       <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <button
-          onClick={onCreateGame}
+          onClick={handleCreateGame}
+          disabled={creating}
           style={{
             padding: '0.75rem 1.5rem',
             borderRadius: '4px',
             border: 'none',
-            background: '#4a9eff',
+            background: creating ? '#666' : '#4a9eff',
             color: '#fff',
-            cursor: 'pointer',
+            cursor: creating ? 'not-allowed' : 'pointer',
             fontWeight: 'bold',
+            opacity: creating ? 0.7 : 1,
           }}
         >
-          Nova Partida Online
+          {creating ? 'Criando...' : 'Nova Partida Online'}
         </button>
         <button
           onClick={() => {
@@ -97,22 +141,36 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame }: Game
           />
           <button
             onClick={handleJoinByCode}
+            disabled={joining || !joinCode.trim()}
             style={{
               padding: '0.75rem 1.5rem',
               borderRadius: '4px',
               border: 'none',
-              background: '#2a7a2a',
+              background: joining || !joinCode.trim() ? '#666' : '#2a7a2a',
               color: '#fff',
-              cursor: 'pointer',
+              cursor: joining || !joinCode.trim() ? 'not-allowed' : 'pointer',
+              opacity: joining || !joinCode.trim() ? 0.7 : 1,
             }}
           >
-            Entrar
+            {joining ? 'Entrando...' : 'Entrar'}
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {games.map((game) => (
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '2rem', color: '#aaa' }}>
+          Carregando partidas...
+        </div>
+      ) : games.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '2rem', color: '#aaa' }}>
+          <p>Nenhuma partida encontrada.</p>
+          <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
+            Crie uma nova partida ou entre com um código de convite.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {games.map((game) => (
           <div
             key={game.id}
             onClick={() => onSelectGame(game.id)}
@@ -140,7 +198,8 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame }: Game
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
