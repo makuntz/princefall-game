@@ -4,7 +4,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json --outDir dist --rootDir src",
     "start": "node dist/index.js",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
@@ -26,6 +26,13 @@
     "prisma": "^5.7.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0"
-  }
+  }, 
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "module": "commonjs",
+    "target": "es2020"
+  },
+  "include": ["src/**/*.ts"]
 }
 
