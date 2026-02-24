@@ -9,8 +9,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@princefall/game-core": "workspace:*",
-    "@princefall/shared": "workspace:*",
+    "@princefall/game-core": "*",
+    "@princefall/shared": "*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
