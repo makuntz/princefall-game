@@ -2,15 +2,56 @@ import { PrismaClient } from '@prisma/client';
 import {
   createInitialState,
   applyAction,
-  serializeState,
-  deserializeState,
   GameState,
   GameAction,
   Position,
+  Piece,
 } from '@princefall/game-core';
 import { randomBytes } from 'crypto';
 
+type BoardJson = Record<string, { type: Piece['type']; color: Piece['color']; hasMoved?: boolean; canSwapWithPrince?: boolean }>;
+
 export class GameService {
+  private boardToJson(board: Map<string, Piece>): BoardJson {
+    const json: BoardJson = {};
+    board.forEach((piece, key) => {
+      json[key] = {
+        type: piece.type,
+        color: piece.color,
+        hasMoved: piece.hasMoved,
+        canSwapWithPrince: piece.canSwapWithPrince,
+      };
+    });
+    return json;
+  }
+
+  private jsonToBoard(json: BoardJson): Map<string, Piece> {
+    const board = new Map<string, Piece>();
+    Object.entries(json).forEach(([key, pieceData]) => {
+      board.set(key, {
+        type: pieceData.type,
+        color: pieceData.color,
+        hasMoved: pieceData.hasMoved,
+        canSwapWithPrince: pieceData.canSwapWithPrince,
+      });
+    });
+    return board;
+  }
+
+  dbToGameState(game: any): GameState {
+    const board = this.jsonToBoard((game.board || {}) as BoardJson);
+    return {
+      board,
+      currentTurn: game.currentTurn as 'white' | 'black',
+      moveNumber: game.moveNumber,
+      whiteGeneralPosition: game.whiteGeneralPos as Position | undefined,
+      blackGeneralPosition: game.blackGeneralPos as Position | undefined,
+      whiteKingSwapped: game.whiteKingSwapped || false,
+      blackKingSwapped: game.blackKingSwapped || false,
+      status: game.phase === 'finished' ? 'finished' : game.phase === 'playing' ? 'playing' : 'setup',
+    };
+  }
+
   async createGame(
     prisma: PrismaClient,
     whitePlayerId: string,
@@ -20,14 +61,16 @@ export class GameService {
       ? customInviteCode.toUpperCase().trim() 
       : this.generateInviteCode();
     const initialState = createInitialState();
-    const serialized = serializeState(initialState);
+    const boardJson = this.boardToJson(initialState.board);
 
     const game = await prisma.game.create({
       data: {
         whitePlayerId,
-        status: 'waiting',
         inviteCode,
-        gameState: serialized as any,
+        board: boardJson as any,
+        phase: 'waiting',
+        currentTurn: 'white',
+        moveNumber: 0,
         version: 1,
       },
       include: {
@@ -64,7 +107,7 @@ export class GameService {
       where: { id: gameId },
       data: {
         blackPlayerId,
-        status: 'setup',
+        phase: 'setup',
       },
       include: {
         whitePlayer: { select: { id: true, username: true } },
@@ -101,15 +144,15 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      if (game.status !== 'setup' && game.status !== 'waiting') {
+      if (game.phase !== 'setup' && game.phase !== 'waiting') {
         return { success: false, error: 'Game not in setup phase' };
       }
       
-      if (game.status === 'waiting' && playerColor !== 'white') {
+      if (game.phase === 'waiting' && playerColor !== 'white') {
         return { success: false, error: 'Waiting for second player to join' };
       }
 
-      const gameState = deserializeState(game.gameState as any);
+      const gameState = this.dbToGameState(game);
 
       if (
         (playerColor === 'white' && gameState.whiteGeneralPosition) ||
@@ -125,18 +168,29 @@ export class GameService {
       };
 
       const newState = applyAction(gameState, action);
-      const serialized = serializeState(newState);
+      const boardJson = this.boardToJson(newState.board);
 
-      const newStatus = game.status === 'waiting' ? (newState.status === 'playing' ? 'playing' : 'setup') : newState.status;
-      
+      const updateData: any = {
+        board: boardJson,
+        currentTurn: newState.currentTurn,
+        version: game.version + 1,
+      };
+
+      if (playerColor === 'white') {
+        updateData.whiteGeneralPos = position;
+      } else {
+        updateData.blackGeneralPos = position;
+      }
+
+      if (newState.whiteGeneralPosition && newState.blackGeneralPosition) {
+        updateData.phase = 'coinflip';
+      } else if (game.phase === 'waiting') {
+        updateData.phase = 'setup';
+      }
+
       const updatedGame = await tx.game.update({
         where: { id: gameId },
-        data: {
-          gameState: serialized as any,
-          status: newStatus,
-          currentTurn: newState.currentTurn,
-          version: game.version + 1,
-        },
+        data: updateData,
         include: {
           whitePlayer: { select: { id: true, username: true } },
           blackPlayer: { select: { id: true, username: true } },
@@ -176,32 +230,36 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      const gameState = deserializeState(game.gameState as any);
+      if (game.phase !== 'coinflip') {
+        return { 
+          success: false, 
+          error: `Game not in coinflip phase. Current phase: ${game.phase}` 
+        };
+      }
 
-      if (gameState.moveNumber > 0 || gameState.lastMove) {
+      if (game.moveNumber > 0) {
+        const gameWithPlayers = await tx.game.findUnique({
+          where: { id: gameId },
+          include: {
+            whitePlayer: { select: { id: true, username: true } },
+            blackPlayer: { select: { id: true, username: true } },
+          },
+        });
         return { 
           success: true, 
-          game, 
-          gameState,
+          game: gameWithPlayers || game, 
           coinflipDone: true,
-          currentTurn: gameState.currentTurn 
+          currentTurn: game.currentTurn 
         };
       }
 
       const coinflipResult = Math.random() < 0.5 ? 'white' : 'black';
       
-      const newState: GameState = {
-        ...gameState,
-        currentTurn: coinflipResult,
-      };
-
-      const serialized = serializeState(newState);
-
       const updatedGame = await tx.game.update({
         where: { id: gameId },
         data: {
-          gameState: serialized as any,
           currentTurn: coinflipResult,
+          phase: 'playing',
           version: game.version + 1,
         },
         include: {
@@ -213,7 +271,6 @@ export class GameService {
       return {
         success: true,
         game: updatedGame,
-        gameState: newState,
         coinflipDone: false,
         coinflipResult,
       };
@@ -252,7 +309,7 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      if (game.status !== 'playing') {
+      if (game.phase !== 'playing') {
         return { success: false, error: 'Game not in playing phase' };
       }
 
@@ -273,16 +330,23 @@ export class GameService {
       });
 
       if (existingMove) {
-        const gameState = deserializeState(game.gameState as any);
+        const gameState = this.dbToGameState(game);
+        const gameWithPlayers = await tx.game.findUnique({
+          where: { id: gameId },
+          include: {
+            whitePlayer: { select: { id: true, username: true } },
+            blackPlayer: { select: { id: true, username: true } },
+          },
+        });
         return {
           success: true,
-          game,
+          game: gameWithPlayers || game,
           gameState,
           move: existingMove,
         };
       }
 
-      const gameState = deserializeState(game.gameState as any);
+      const gameState = this.dbToGameState(game);
 
       if (gameState.currentTurn !== playerColor) {
         return { success: false, error: 'Not your turn' };
@@ -319,7 +383,7 @@ export class GameService {
         return { success: false, error: 'Invalid move' };
       }
 
-      const serialized = serializeState(newState);
+      const boardJson = this.boardToJson(newState.board);
 
       const move = await tx.gameMove.create({
         data: {
@@ -334,14 +398,16 @@ export class GameService {
       });
 
       const updateData: any = {
-        gameState: serialized,
+        board: boardJson,
         currentTurn: newState.currentTurn,
         moveNumber: newState.moveNumber,
+        whiteKingSwapped: newState.whiteKingSwapped,
+        blackKingSwapped: newState.blackKingSwapped,
         version: game.version + 1,
       };
 
       if (newState.status === 'finished') {
-        updateData.status = 'finished';
+        updateData.phase = 'finished';
         updateData.winnerId = playerId;
         updateData.finishedAt = new Date();
       }
@@ -420,4 +486,3 @@ export class GameService {
     return randomBytes(6).toString('hex').toUpperCase();
   }
 }
-

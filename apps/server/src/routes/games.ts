@@ -1,8 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { GameService } from '../services/GameService';
-import { createInitialState, applyAction, serializeState, deserializeState } from '@princefall/game-core';
-import { GameAction } from '@princefall/game-core';
+import { serializeState } from '@princefall/game-core';
 
 const gameService = new GameService();
 
@@ -49,12 +48,23 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const { inviteCode } = createGameSchema.parse(request.body);
 
     const game = await gameService.createGame(fastify.prisma, userId, inviteCode);
+    const gameState = gameService.dbToGameState(game);
+    const serializedGameState = serializeState(gameState);
 
     return { 
       game: {
-        ...game,
+        id: game.id,
+        inviteCode: game.inviteCode,
+        phase: game.phase,
+        currentTurn: game.currentTurn,
+        moveNumber: game.moveNumber,
+        whitePlayer: game.whitePlayer,
+        blackPlayer: null,
+        whiteGeneralPos: game.whiteGeneralPos,
+        blackGeneralPos: game.blackGeneralPos,
         playerColor: 'white' as const,
-      }
+      },
+      gameState: serializedGameState,
     };
   });
 
@@ -64,18 +74,13 @@ export async function gameRoutes(fastify: FastifyInstance) {
 
     const normalizedCode = inviteCode.toUpperCase().trim();
 
-    fastify.log.info(`Tentativa de entrar no jogo com código: ${normalizedCode} (usuário: ${userId})`);
-
     const game = await fastify.prisma.game.findUnique({
       where: { inviteCode: normalizedCode },
     });
 
     if (!game) {
-      fastify.log.warn(`Código não encontrado: ${normalizedCode}`);
       return reply.code(404).send({ error: 'Código de convite inválido' });
     }
-
-    fastify.log.info(`Jogo encontrado: ${game.id}, status: ${game.status}, blackPlayerId: ${game.blackPlayerId}`);
 
     if (game.blackPlayerId) {
       return reply.code(400).send({ error: 'Esta partida já está completa' });
@@ -88,16 +93,26 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const joinedGame = await gameService.joinGame(fastify.prisma, game.id, userId, normalizedCode);
 
     if (!joinedGame) {
-      fastify.log.error(`Erro ao entrar no jogo ${game.id} com código ${normalizedCode}`);
       return reply.code(404).send({ error: 'Erro ao entrar na partida' });
     }
 
-    fastify.log.info(`Usuário ${userId} entrou no jogo ${game.id} com sucesso`);
+    const gameState = gameService.dbToGameState(joinedGame);
+    const serializedGameState = serializeState(gameState);
+
     return { 
       game: {
-        ...joinedGame,
+        id: joinedGame.id,
+        inviteCode: joinedGame.inviteCode,
+        phase: joinedGame.phase,
+        currentTurn: joinedGame.currentTurn,
+        moveNumber: joinedGame.moveNumber,
+        whitePlayer: joinedGame.whitePlayer,
+        blackPlayer: joinedGame.blackPlayer,
+        whiteGeneralPos: joinedGame.whiteGeneralPos,
+        blackGeneralPos: joinedGame.blackGeneralPos,
         playerColor: 'black' as const,
-      }
+      },
+      gameState: serializedGameState,
     };
   });
 
@@ -144,24 +159,26 @@ export async function gameRoutes(fastify: FastifyInstance) {
     }
 
     const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
-
-    const gameState = deserializeState(game.gameState as any);
+    const gameState = gameService.dbToGameState(game);
+    const serializedGameState = serializeState(gameState);
 
     return {
       game: {
         id: game.id,
-        status: game.status,
-        whitePlayer: game.whitePlayer,
-        blackPlayer: game.blackPlayer,
+        inviteCode: game.inviteCode,
+        phase: game.phase,
         currentTurn: game.currentTurn,
         moveNumber: game.moveNumber,
+        whitePlayer: game.whitePlayer,
+        blackPlayer: game.blackPlayer,
+        whiteGeneralPos: game.whiteGeneralPos,
+        blackGeneralPos: game.blackGeneralPos,
         winnerId: game.winnerId,
-        inviteCode: game.inviteCode,
         createdAt: game.createdAt,
         updatedAt: game.updatedAt,
         playerColor,
       },
-      gameState,
+      gameState: serializedGameState,
     };
   });
 
@@ -180,13 +197,24 @@ export async function gameRoutes(fastify: FastifyInstance) {
     }
 
     const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
+    const gameState = gameService.dbToGameState(result.game);
+    const serializedGameState = serializeState(gameState);
+    const gameWithPlayers = result.game as any;
 
     return {
       game: {
-        ...result.game,
+        id: result.game.id,
+        inviteCode: result.game.inviteCode,
+        phase: result.game.phase,
+        currentTurn: result.game.currentTurn,
+        moveNumber: result.game.moveNumber,
+        whitePlayer: gameWithPlayers.whitePlayer || null,
+        blackPlayer: gameWithPlayers.blackPlayer || null,
+        whiteGeneralPos: result.game.whiteGeneralPos,
+        blackGeneralPos: result.game.blackGeneralPos,
         playerColor,
       },
-      gameState: result.gameState,
+      gameState: serializedGameState,
       coinflipDone: result.coinflipDone,
       coinflipResult: result.coinflipResult,
       currentTurn: result.currentTurn,
@@ -214,13 +242,22 @@ export async function gameRoutes(fastify: FastifyInstance) {
     }
 
     const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
+    const serializedGameState = serializeState(result.gameState);
 
     return { 
       game: {
-        ...result.game,
+        id: result.game.id,
+        inviteCode: result.game.inviteCode,
+        phase: result.game.phase,
+        currentTurn: result.game.currentTurn,
+        moveNumber: result.game.moveNumber,
+        whitePlayer: result.game.whitePlayer,
+        blackPlayer: result.game.blackPlayer,
+        whiteGeneralPos: result.game.whiteGeneralPos,
+        blackGeneralPos: result.game.blackGeneralPos,
         playerColor,
       }, 
-      gameState: result.gameState 
+      gameState: serializedGameState 
     };
   });
 
@@ -229,18 +266,18 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const moveData = submitMoveSchema.parse(request.body);
 
-      const result = await gameService.submitMove(
-        fastify.prisma,
-        id,
-        userId,
-        {
-          from: { col: moveData.from.col, row: moveData.from.row as any },
-          to: { col: moveData.to.col, row: moveData.to.row as any },
-          promotion: moveData.promotion,
-          isSwap: moveData.isSwap,
-          moveNumber: moveData.moveNumber,
-        }
-      );
+    const result = await gameService.submitMove(
+      fastify.prisma,
+      id,
+      userId,
+      {
+        from: { col: moveData.from.col, row: moveData.from.row as any },
+        to: { col: moveData.to.col, row: moveData.to.row as any },
+        promotion: moveData.promotion,
+        isSwap: moveData.isSwap,
+        moveNumber: moveData.moveNumber,
+      }
+    );
 
     if (!result.success) {
       return reply.code(400).send({ error: result.error });
@@ -251,13 +288,22 @@ export async function gameRoutes(fastify: FastifyInstance) {
     }
 
     const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
+    const serializedGameState = serializeState(result.gameState);
 
     return {
       game: {
-        ...result.game,
+        id: result.game.id,
+        inviteCode: result.game.inviteCode,
+        phase: result.game.phase,
+        currentTurn: result.game.currentTurn,
+        moveNumber: result.game.moveNumber,
+        whitePlayer: 'whitePlayer' in result.game ? result.game.whitePlayer : null,
+        blackPlayer: 'blackPlayer' in result.game ? result.game.blackPlayer : null,
+        whiteGeneralPos: result.game.whiteGeneralPos,
+        blackGeneralPos: result.game.blackGeneralPos,
         playerColor,
       },
-      gameState: result.gameState,
+      gameState: serializedGameState,
       move: result.move,
     };
   });

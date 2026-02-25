@@ -9,24 +9,22 @@ interface CoinflipScreenProps {
 
 export function CoinflipScreen({ onResult, coinflipDone, currentTurn }: CoinflipScreenProps) {
   const [flipping, setFlipping] = useState(false);
-  const [result, setResult] = useState<'white' | 'black' | null>(currentTurn || null);
-  const [showResult, setShowResult] = useState(coinflipDone || false);
+  const result = coinflipDone && currentTurn ? currentTurn : null;
+  const showResult = coinflipDone || false;
 
   const handleFlip = () => {
-    setFlipping(true);
-    setShowResult(false);
+    if (coinflipDone) return;
     
-    const flipResult = Math.random() < 0.5 ? 'white' : 'black';
+    setFlipping(true);
+    onResult();
     
     setTimeout(() => {
       setFlipping(false);
-      setResult(flipResult);
-      setShowResult(true);
     }, 3000);
   };
 
   const handleStart = () => {
-    if (result || coinflipDone) {
+    if (coinflipDone) {
       onResult();
     }
   };
@@ -38,19 +36,19 @@ export function CoinflipScreen({ onResult, coinflipDone, currentTurn }: Coinflip
         <div className="coin-face coin-white">♔</div>
         <div className="coin-face coin-black">♚</div>
       </div>
-      {!result && !coinflipDone ? (
+      {!coinflipDone ? (
         <button className="flip-btn" onClick={handleFlip} disabled={flipping}>
           {flipping ? 'Girando...' : 'Jogar Moeda!'}
         </button>
       ) : (
         <>
           <div className={`result-message ${showResult ? 'show' : ''}`}>
-            <strong>{result === 'white' ? 'BRANCAS COMECAM!' : 'PRETAS COMECAM!'}</strong>
+            <strong>{currentTurn === 'white' ? 'BRANCAS COMECAM!' : 'PRETAS COMECAM!'}</strong>
             <br />
-            {result === 'white' ? '♔ As peças brancas fazem a primeira jogada' : '♚ As peças pretas fazem a primeira jogada'}
+            {currentTurn === 'white' ? '♔ As peças brancas fazem a primeira jogada' : '♚ As peças pretas fazem a primeira jogada'}
           </div>
           <button className="flip-btn" onClick={handleStart}>
-            Iniciar Jogo!
+            Continuar Jogo
           </button>
         </>
       )}
