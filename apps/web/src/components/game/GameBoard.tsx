@@ -10,11 +10,12 @@ interface GameBoardProps {
   token: string;
   onBack: () => void;
   playerColor?: 'white' | 'black';
+  onOpenLeaderboard?: () => void;
 }
 
 type GamePhase = 'waiting' | 'setup' | 'coinflip' | 'playing' | 'finished';
 
-export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps) {
+export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboard }: GameBoardProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [loading, setLoading] = useState(false);
@@ -312,6 +313,143 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
           coinflipDone={coinflipDone}
           currentTurn={gameInfo.currentTurn}
         />
+      </div>
+    );
+  }
+
+  if (phase === 'finished') {
+    const white = gameInfo.whitePlayer;
+    const black = gameInfo.blackPlayer;
+    const winnerName = gameInfo.winnerId === white?.id ? white.username :
+                       gameInfo.winnerId === black?.id ? black.username :
+                       null;
+    const winnerSide = gameInfo.winnerId === white?.id ? 'Brancas' :
+                       gameInfo.winnerId === black?.id ? 'Pretas' :
+                       null;
+    const finishedReason = gameInfo.finishedReason || 'checkmate';
+
+    return (
+      <div className="game-container">
+        <button className="back-btn" onClick={onBack}>← Voltar</button>
+        
+        <div style={{
+          maxWidth: '600px',
+          margin: '2rem auto',
+          padding: '2rem',
+          background: '#2a2a2a',
+          borderRadius: '12px',
+          border: '2px solid #4a9eff',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '1rem' }}>🏁</div>
+          <h1 style={{ fontSize: '32px', marginBottom: '1rem', color: '#fff' }}>
+            Partida Finalizada
+          </h1>
+          
+          {winnerName && winnerSide ? (
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{ fontSize: '24px', color: '#4a9eff', marginBottom: '0.5rem' }}>
+                Vencedor: <strong>{winnerName}</strong>
+              </div>
+              <div style={{ fontSize: '18px', color: '#aaa' }}>
+                ({winnerSide})
+              </div>
+              <div style={{ fontSize: '14px', color: '#888', marginTop: '0.5rem' }}>
+                Motivo: {finishedReason === 'timeout' ? 'Tempo esgotado' : 'Xeque-mate'}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: '18px', color: '#aaa', marginBottom: '2rem' }}>
+              Partida finalizada
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={onBack}
+              style={{
+                padding: '12px 24px',
+                background: '#4a9eff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: 'bold'
+              }}
+            >
+              Voltar
+            </button>
+            {onOpenLeaderboard && (
+              <button
+                onClick={onOpenLeaderboard}
+                style={{
+                  padding: '12px 24px',
+                  background: '#FFD700',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}
+              >
+                🏆 Ver Ranking
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="game-layout" style={{ opacity: 0.5, pointerEvents: 'none' }}>
+          <div className="board-wrapper">
+            <div className="board-container">
+              {columns.map((col, idx) => (
+                <div key={`top-${col}`} className="coord-label" style={{ gridColumn: idx + 2, gridRow: 1 }}>
+                  {col}
+                </div>
+              ))}
+              {columns.map((col, idx) => (
+                <div key={`bottom-${col}`} className="coord-label" style={{ gridColumn: idx + 2, gridRow: 11 }}>
+                  {col}
+                </div>
+              ))}
+              {rows.map((row, idx) => (
+                <div key={`left-${row}`} className="coord-label" style={{ gridColumn: 1, gridRow: idx + 2 }}>
+                  {row}
+                </div>
+              ))}
+              {rows.map((row, idx) => (
+                <div key={`right-${row}`} className="coord-label" style={{ gridColumn: 11, gridRow: idx + 2 }}>
+                  {row}
+                </div>
+              ))}
+
+              <div className="board">
+                {rows.map((row) =>
+                  columns.map((col) => {
+                    const pos: Position = { col, row };
+                    const key = positionToString(pos);
+                    const squarePiece = gameState?.board.get(key);
+                    const isLight = (columns.indexOf(col) + row) % 2 === 0;
+
+                    return (
+                      <div
+                        key={key}
+                        className={`square ${isLight ? 'light' : 'dark'}`}
+                      >
+                        {squarePiece && (
+                          <span className={squarePiece.color === 'white' ? 'piece-white' : 'piece-black'}>
+                            {getPieceEmoji(squarePiece.type, squarePiece.color)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
