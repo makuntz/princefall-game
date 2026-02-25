@@ -244,10 +244,54 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     const waiting = currentPlayerColor === 'white'
       ? gameState.whiteGeneralPosition && !gameState.blackGeneralPosition
       : !gameState.whiteGeneralPosition && gameState.blackGeneralPosition;
+    
+    // Verificar se está aguardando segundo jogador (status 'waiting')
+    const waitingForSecondPlayer = gameInfo?.status === 'waiting' && !gameInfo?.blackPlayer;
 
     return (
       <div className="game-container">
         <button className="back-btn" onClick={onBack}>← Voltar</button>
+        {waitingForSecondPlayer && gameInfo?.inviteCode && (
+          <div style={{
+            marginBottom: '20px',
+            padding: '20px',
+            background: '#2a2a2a',
+            borderRadius: '8px',
+            textAlign: 'center',
+            border: '2px solid #4a9eff'
+          }}>
+            <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px' }}>
+              Compartilhe este código com seu oponente:
+            </div>
+            <div style={{
+              fontSize: '32px',
+              fontWeight: 'bold',
+              color: '#4a9eff',
+              letterSpacing: '4px',
+              fontFamily: 'monospace',
+              marginBottom: '10px'
+            }}>
+              {gameInfo.inviteCode}
+            </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(gameInfo.inviteCode);
+                alert('Código copiado para a área de transferência!');
+              }}
+              style={{
+                padding: '8px 16px',
+                background: '#4a9eff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              📋 Copiar Código
+            </button>
+          </div>
+        )}
         <SetupScreen
           playerColor={currentPlayerColor}
           onConfirm={handleSetupGeneral}

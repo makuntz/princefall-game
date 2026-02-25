@@ -55,6 +55,40 @@ export async function gameRoutes(fastify: FastifyInstance) {
     return { game };
   });
 
+  // POST /api/games/join-by-code - Entrar em partida apenas pelo código
+  fastify.post('/join-by-code', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as any).userId;
+    const { inviteCode } = joinGameSchema.parse(request.body);
+
+    // Buscar jogo pelo código
+    const game = await fastify.prisma.game.findUnique({
+      where: { inviteCode: inviteCode.toUpperCase().trim() },
+    });
+
+    if (!game) {
+      return reply.code(404).send({ error: 'Código de convite inválido' });
+    }
+
+    // Verificar se já tem jogador preto
+    if (game.blackPlayerId) {
+      return reply.code(400).send({ error: 'Esta partida já está completa' });
+    }
+
+    // Verificar se o usuário não é o criador da partida
+    if (game.whitePlayerId === userId) {
+      return reply.code(400).send({ error: 'Você já é o criador desta partida' });
+    }
+
+    // Entrar na partida
+    const joinedGame = await gameService.joinGame(fastify.prisma, game.id, userId, inviteCode);
+
+    if (!joinedGame) {
+      return reply.code(404).send({ error: 'Erro ao entrar na partida' });
+    }
+
+    return { game: joinedGame };
+  });
+
   // POST /api/games/:id/join - Entrar em partida
   fastify.post('/:id/join', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
