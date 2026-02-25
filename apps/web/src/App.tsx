@@ -74,6 +74,12 @@ function App() {
     }
   };
 
+  // Handler para quando já entrou via join-by-code (não precisa chamar join novamente)
+  const handleJoinGameByCode = (gameId: string) => {
+    setCurrentGameId(gameId);
+    setView('game');
+  };
+
   if (view === 'login') {
     return <Login onLogin={handleLogin} />;
   }
@@ -84,6 +90,7 @@ function App() {
         token={token!}
         onCreateGame={handleCreateGame}
         onJoinGame={handleJoinGame}
+        onJoinGameByCode={handleJoinGameByCode}
         onSelectGame={(gameId) => {
           setCurrentGameId(gameId);
           setView('game');
