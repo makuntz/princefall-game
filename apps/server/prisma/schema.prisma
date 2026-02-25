@@ -7,32 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Auth identities (OAuth)
-  authIdentities AuthIdentity[]
-  
-  // Games
-  whiteGames Game[] @relation("WhitePlayer")
-  blackGames Game[] @relation("BlackPlayer")
-  
-  // Moves
-  moves GameMove[]
-  
-  // Rating
-  rating Rating?
-}
-
 model AuthIdentity {
   id        String   @id @default(cuid())
   userId    String
-  provider  String   // "google", "email", etc
-  providerId String  // ID no provider
+  provider  String
+  providerId String
   email     String
   createdAt DateTime @default(now())
 
@@ -46,13 +25,17 @@ model Game {
   id            String    @id @default(cuid())
   whitePlayerId String
   blackPlayerId String?
-  status        String    @default("waiting") // waiting | setup | playing | finished
-  currentTurn   String    @default("white") // white | black
-  moveNumber    Int       @default(0)
-  winnerId      String?
   inviteCode    String    @unique
-  gameState     Json      // SerializedGameState
-  version       Int       @default(1) // Para controle de concorrência
+  board         Json      @default("{}")
+  currentTurn   String    @default("white")
+  phase         String    @default("waiting")
+  moveNumber    Int       @default(0)
+  whiteGeneralPos Json?
+  blackGeneralPos Json?
+  whiteKingSwapped Boolean @default(false)
+  blackKingSwapped Boolean @default(false)
+  winnerId      String?
+  version       Int       @default(1)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   finishedAt    DateTime?
@@ -64,7 +47,7 @@ model Game {
 
   @@index([whitePlayerId])
   @@index([blackPlayerId])
-  @@index([status])
+  @@index([phase])
   @@index([inviteCode])
 }
 
@@ -73,8 +56,8 @@ model GameMove {
   gameId     String
   moveNumber Int
   playerId   String
-  from       String   // "A1"
-  to         String   // "B2"
+  from       String
+  to         String
   promotion  String?
   isSwap     Boolean  @default(false)
   createdAt  DateTime @default(now())
@@ -82,7 +65,7 @@ model GameMove {
   game   Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
   player User @relation(fields: [playerId], references: [id])
 
-  @@unique([gameId, moveNumber]) // Previne duplicação
+  @@unique([gameId, moveNumber])
   @@index([gameId])
   @@index([playerId])
 }
@@ -90,7 +73,7 @@ model GameMove {
 model Rating {
   id          String   @id @default(cuid())
   userId      String   @unique
-  rating      Int      @default(1500) // Elo inicial
+  rating      Int      @default(1500)
   gamesPlayed Int      @default(0)
   wins        Int      @default(0)
   losses      Int      @default(0)
@@ -99,6 +82,19 @@ model Rating {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([rating]) // Para leaderboard
+  @@index([rating])
 }
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authIdentities AuthIdentity[]
+  whiteGames Game[] @relation("WhitePlayer")
+  blackGames Game[] @relation("BlackPlayer")
+  moves GameMove[]
+  rating Rating?
+}

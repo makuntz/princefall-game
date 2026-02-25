@@ -12,43 +12,20 @@ interface GameBoardProps {
   playerColor?: 'white' | 'black';
 }
 
-type GamePhase = 'setup' | 'coinflip' | 'playing' | 'finished';
+type GamePhase = 'waiting' | 'setup' | 'coinflip' | 'playing' | 'finished';
 
 export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [loading, setLoading] = useState(false);
   const [gameInfo, setGameInfo] = useState<any>(null);
-  const [phase, setPhase] = useState<GamePhase>('setup');
   const [swapMode, setSwapMode] = useState(false);
-  const [coinflipResult, setCoinflipResult] = useState<'white' | 'black' | null>(null);
 
   useEffect(() => {
     loadGame();
     const interval = setInterval(loadGame, 2000);
     return () => clearInterval(interval);
   }, [gameId, token]);
-
-  useEffect(() => {
-    if (gameState) {
-      if (gameState.status === 'setup') {
-        setPhase('setup');
-      } else if (gameState.status === 'playing') {
-        if (phase === 'setup' && !coinflipResult && gameState.moveNumber === 0 && !gameState.lastMove) {
-          if (gameState.currentTurn) {
-            setCoinflipResult(gameState.currentTurn);
-            setPhase('playing');
-          } else {
-            setPhase('coinflip');
-          }
-        } else {
-          setPhase('playing');
-        }
-      } else if (gameState.status === 'finished') {
-        setPhase('finished');
-      }
-    }
-  }, [gameState?.status, gameState?.moveNumber, coinflipResult]);
 
   const loadGame = async () => {
     try {
@@ -61,7 +38,7 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   };
 
   const handleSetupGeneral = async (pos: Position) => {
-    if (!gameState || gameState.status !== 'setup') return;
+    if (!gameInfo || gameInfo.phase !== 'setup') return;
 
     setLoading(true);
     try {
@@ -80,13 +57,13 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   };
 
   const handleCoinflipResult = async () => {
+    if (!gameInfo || gameInfo.phase !== 'coinflip') return;
+
     setLoading(true);
     try {
       const res = await api.post(`/games/${gameId}/coinflip`, {}, { token });
       setGameState(deserializeState(res.gameState));
       setGameInfo(res.game);
-      setCoinflipResult(res.coinflipResult || res.currentTurn);
-      setPhase('playing');
     } catch (err: any) {
       alert(err.message || 'Erro ao fazer coinflip');
     } finally {
@@ -95,8 +72,8 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   };
 
   const handleCellClick = async (pos: Position) => {
-    if (!gameState || gameState.status !== 'playing' || phase !== 'playing') return;
-    if (gameState.currentTurn !== playerColor) return;
+    if (!gameState || !gameInfo || gameInfo.phase !== 'playing') return;
+    if (gameState.currentTurn !== (gameInfo.playerColor || playerColor)) return;
 
     if (swapMode) {
       handleSwapClick(pos);
@@ -202,11 +179,10 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   };
 
   const handleSwapMode = () => {
-    if (!gameState || gameState.status !== 'playing') return;
+    if (!gameState || !gameInfo || gameInfo.phase !== 'playing') return;
     
-    const canSwap = gameState.currentTurn === 'white' 
-      ? !gameState.whiteKingSwapped 
-      : !gameState.blackKingSwapped;
+    const canSwap = gameState.currentTurn === (gameInfo.playerColor || playerColor) &&
+      (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
 
     if (!canSwap) {
       alert('Você já usou sua troca neste jogo!');
@@ -235,19 +211,14 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     );
   }
 
-  const currentPlayerColor: 'white' | 'black' = playerColor || gameInfo?.playerColor || 'white';
+  const currentPlayerColor: 'white' | 'black' = gameInfo.playerColor || playerColor || 'white';
+  const phase: GamePhase = gameInfo.phase || 'waiting';
 
-  if (phase === 'setup') {
-    const waiting = currentPlayerColor === 'white'
-      ? gameState.whiteGeneralPosition && !gameState.blackGeneralPosition
-      : !gameState.whiteGeneralPosition && gameState.blackGeneralPosition;
-    
-    const waitingForSecondPlayer = gameInfo?.status === 'waiting' && !gameInfo?.blackPlayer;
-
+  if (phase === 'waiting') {
     return (
       <div className="game-container">
         <button className="back-btn" onClick={onBack}>← Voltar</button>
-        {waitingForSecondPlayer && gameInfo?.inviteCode && (
+        {gameInfo?.inviteCode && (
           <div style={{
             marginBottom: '20px',
             padding: '20px',
@@ -288,6 +259,21 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
             </button>
           </div>
         )}
+        <div className="setup-screen">
+          <div className="setup-title">Aguardando segundo jogador...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'setup') {
+    const waiting = currentPlayerColor === 'white'
+      ? gameInfo.whiteGeneralPos && !gameInfo.blackGeneralPos
+      : !gameInfo.whiteGeneralPos && gameInfo.blackGeneralPos;
+
+    return (
+      <div className="game-container">
+        <button className="back-btn" onClick={onBack}>← Voltar</button>
         <SetupScreen
           playerColor={currentPlayerColor}
           onConfirm={handleSetupGeneral}
@@ -316,15 +302,15 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   }
 
   if (phase === 'coinflip') {
-    const coinflipAlreadyDone = gameState.currentTurn && gameState.moveNumber === 0;
+    const coinflipDone = gameInfo.moveNumber > 0 || gameInfo.currentTurn !== 'white';
     
     return (
       <div className="game-container">
         <button className="back-btn" onClick={onBack}>← Voltar</button>
         <CoinflipScreen 
           onResult={handleCoinflipResult} 
-          coinflipDone={coinflipAlreadyDone}
-          currentTurn={gameState.currentTurn}
+          coinflipDone={coinflipDone}
+          currentTurn={gameInfo.currentTurn}
         />
       </div>
     );
@@ -459,4 +445,3 @@ function getPieceEmoji(type: string, color: string): string {
   };
   return pieces[type]?.[color as 'white' | 'black'] || '?';
 }
-
