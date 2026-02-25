@@ -3,12 +3,13 @@ import { GameBoard } from './components/game/GameBoard';
 import { Login } from './components/Login';
 import { GameList } from './components/GameList';
 import { LocalGame } from './components/LocalGame';
+import { Leaderboard } from './components/Leaderboard';
 import { api } from './api';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
-  const [view, setView] = useState<'login' | 'list' | 'game' | 'local'>('login');
+  const [view, setView] = useState<'login' | 'list' | 'game' | 'local' | 'leaderboard'>('login');
 
   useEffect(() => {
     if (token) {
@@ -80,6 +81,10 @@ function App() {
     setView('game');
   };
 
+  const handleOpenLeaderboard = () => {
+    setView('leaderboard');
+  };
+
   if (view === 'login') {
     return <Login onLogin={handleLogin} />;
   }
@@ -91,10 +96,20 @@ function App() {
         onCreateGame={handleCreateGame}
         onJoinGame={handleJoinGame}
         onJoinGameByCode={handleJoinGameByCode}
+        onOpenLeaderboard={handleOpenLeaderboard}
         onSelectGame={(gameId) => {
           setCurrentGameId(gameId);
           setView('game');
         }}
+      />
+    );
+  }
+
+  if (view === 'leaderboard') {
+    return (
+      <Leaderboard
+        token={token!}
+        onBack={() => setView('list')}
       />
     );
   }
@@ -105,6 +120,7 @@ function App() {
         gameId={currentGameId}
         token={token!}
         onBack={() => setView('list')}
+        onOpenLeaderboard={handleOpenLeaderboard}
       />
     );
   }

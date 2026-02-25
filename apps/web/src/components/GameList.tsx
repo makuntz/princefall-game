@@ -14,10 +14,11 @@ interface GameListProps {
   onCreateGame: () => void;
   onJoinGame: (gameId: string, inviteCode: string) => void;
   onSelectGame: (gameId: string) => void;
-  onJoinGameByCode?: (gameId: string) => void; // Nova prop para entrar direto após join-by-code
+  onJoinGameByCode?: (gameId: string) => void;
+  onOpenLeaderboard?: () => void;
 }
 
-export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode }: GameListProps) {
+export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode, onOpenLeaderboard }: GameListProps) {
   const [games, setGames] = useState<Game[]>([]);
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(true);
@@ -118,23 +119,41 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
         >
           {creating ? 'Criando...' : 'Nova Partida Online'}
         </button>
-        <button
-          onClick={() => {
-            const event = new CustomEvent('startLocalGame');
-            window.dispatchEvent(event);
-          }}
-          style={{
-            padding: '0.75rem 1.5rem',
-            borderRadius: '4px',
-            border: 'none',
-            background: '#4CAF50',
-            color: '#fff',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-          }}
-        >
-          🎮 Jogar Local (Teste)
-        </button>
+        {!import.meta.env.PROD && (
+          <button
+            onClick={() => {
+              const event = new CustomEvent('startLocalGame');
+              window.dispatchEvent(event);
+            }}
+            style={{
+              padding: '0.75rem 1.5rem',
+              borderRadius: '4px',
+              border: 'none',
+              background: '#4CAF50',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            🎮 Jogar Local (Teste)
+          </button>
+        )}
+        {onOpenLeaderboard && (
+          <button
+            onClick={onOpenLeaderboard}
+            style={{
+              padding: '0.75rem 1.5rem',
+              borderRadius: '4px',
+              border: 'none',
+              background: '#FFD700',
+              color: '#000',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            🏆 Ranking
+          </button>
+        )}
 
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
           <input
