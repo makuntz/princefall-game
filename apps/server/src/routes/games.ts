@@ -160,6 +160,12 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
 
     const gameState = deserializeState(game.gameState as any);
+    
+    // Debug: verificar se board está vazio
+    if (gameState.board.size === 0 && game.status === 'playing') {
+      const serializedBoard = (game.gameState as any).board;
+      fastify.log.error(`⚠️ Board vazio no jogo ${id}! Status: ${game.status}, Board keys: ${Object.keys(serializedBoard || {}).length}`);
+    }
 
     return {
       game: {
