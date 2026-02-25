@@ -19,6 +19,7 @@ const allowedOrigins = process.env.CORS_ORIGIN
       'http://localhost:3000',
       'http://localhost:5173', // Vite dev server padrão
       'https://princefall-game-c4i256t2p-makuntzs-projects.vercel.app',
+      'https://princefall-game-web.vercel.app'
     ];
 
 fastify.register(cors, {
