@@ -229,16 +229,8 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   }
 
   // Determinar cor do jogador atual
-  // TODO: obter do backend (comparar userId com whitePlayerId/blackPlayerId)
-  // Por enquanto, vamos tentar inferir do gameInfo ou usar prop
-  let currentPlayerColor: 'white' | 'black' = playerColor || 'white';
-  
-  // Tentar inferir do gameInfo se disponível
-  if (gameInfo && !playerColor) {
-    // Assumir que o usuário atual é o primeiro que entrou (white) ou o segundo (black)
-    // Isso precisa ser melhorado no backend retornando qual cor o usuário é
-    currentPlayerColor = 'white'; // Default
-  }
+  // Prioridade: 1) prop playerColor, 2) gameInfo.playerColor do backend, 3) default 'white'
+  let currentPlayerColor: 'white' | 'black' = playerColor || gameInfo?.playerColor || 'white';
 
   if (phase === 'setup') {
     const waiting = currentPlayerColor === 'white'

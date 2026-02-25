@@ -45,14 +45,20 @@ async function authenticate(request: any, reply: any) {
 }
 
 export async function gameRoutes(fastify: FastifyInstance) {
-  // POST /api/games - Criar partida
+    // POST /api/games - Criar partida
   fastify.post('/', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { inviteCode } = createGameSchema.parse(request.body);
 
     const game = await gameService.createGame(fastify.prisma, userId, inviteCode);
 
-    return { game };
+    // Criador sempre é brancas
+    return { 
+      game: {
+        ...game,
+        playerColor: 'white' as const,
+      }
+    };
   });
 
   // POST /api/games/join-by-code - Entrar em partida apenas pelo código
@@ -96,7 +102,12 @@ export async function gameRoutes(fastify: FastifyInstance) {
     }
 
     fastify.log.info(`Usuário ${userId} entrou no jogo ${game.id} com sucesso`);
-    return { game: joinedGame };
+    return { 
+      game: {
+        ...joinedGame,
+        playerColor: 'black' as const, // Segundo jogador sempre é pretas
+      }
+    };
   });
 
   // POST /api/games/:id/join - Entrar em partida
@@ -111,7 +122,15 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Game not found or invalid invite code' });
     }
 
-    return { game };
+    // Determinar cor do jogador
+    const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
+
+    return { 
+      game: {
+        ...game,
+        playerColor,
+      }
+    };
   });
 
   // GET /api/games/:id - Obter estado da partida
@@ -137,6 +156,9 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(403).send({ error: 'Not a participant' });
     }
 
+    // Determinar cor do jogador atual
+    const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
+
     const gameState = deserializeState(game.gameState as any);
 
     return {
@@ -151,6 +173,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
         inviteCode: game.inviteCode,
         createdAt: game.createdAt,
         updatedAt: game.updatedAt,
+        playerColor, // Adicionar cor do jogador atual
       },
       gameState,
     };
@@ -173,7 +196,20 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: result.error });
     }
 
-    return { game: result.game, gameState: result.gameState };
+    if (!result.game) {
+      return reply.code(500).send({ error: 'Game not found after setup' });
+    }
+
+    // Determinar cor do jogador
+    const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
+
+    return { 
+      game: {
+        ...result.game,
+        playerColor,
+      }, 
+      gameState: result.gameState 
+    };
   });
 
   // POST /api/games/:id/moves - Fazer jogada
@@ -199,8 +235,18 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: result.error });
     }
 
+    if (!result.game) {
+      return reply.code(500).send({ error: 'Game not found after move' });
+    }
+
+    // Determinar cor do jogador
+    const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
+
     return {
-      game: result.game,
+      game: {
+        ...result.game,
+        playerColor,
+      },
       gameState: result.gameState,
       move: result.move,
     };
