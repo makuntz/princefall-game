@@ -320,11 +320,13 @@ export class GameService {
         };
       }
 
+      const nextMoveNumber = game.moveNumber + 1;
+
       const existingMove = await tx.gameMove.findUnique({
         where: {
           gameId_moveNumber: {
             gameId,
-            moveNumber: moveData.moveNumber,
+            moveNumber: nextMoveNumber,
           },
         },
       });
@@ -388,7 +390,7 @@ export class GameService {
       const move = await tx.gameMove.create({
         data: {
           gameId,
-          moveNumber: newState.moveNumber,
+          moveNumber: nextMoveNumber,
           playerId,
           from: `${moveData.from.col}${moveData.from.row}`,
           to: `${moveData.to.col}${moveData.to.row}`,
