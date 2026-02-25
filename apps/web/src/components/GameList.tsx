@@ -27,7 +27,6 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
 
   useEffect(() => {
     loadGames();
-    // Atualizar lista a cada 5 segundos
     const interval = setInterval(loadGames, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -66,23 +65,15 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
     setJoining(true);
     try {
       const code = joinCode.toUpperCase().trim();
-      console.log('Tentando entrar com código:', code);
-      // Buscar e entrar no jogo pelo código diretamente no backend
-      // Esta rota já faz tudo: busca o jogo e adiciona o jogador
       const res = await api.post('/games/join-by-code', { inviteCode: code }, { token });
-      console.log('Resposta do servidor:', res);
       
-      // Se temos a função onJoinGameByCode, usar ela (não precisa chamar join novamente)
-      // Senão, usar onJoinGame (para compatibilidade)
       if (onJoinGameByCode) {
         onJoinGameByCode(res.game.id);
       } else {
-        // Fallback: tentar usar onJoinGame, mas pode falhar se já entrou
         await onJoinGame(res.game.id, code);
       }
     } catch (err: any) {
       console.error('Error joining game:', err);
-      // Extrair mensagem de erro do response se disponível
       let errorMessage = 'Erro ao entrar na partida';
       if (err.message) {
         errorMessage = err.message;

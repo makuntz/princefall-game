@@ -25,7 +25,7 @@ const submitMoveSchema = z.object({
   }),
   promotion: z.string().optional(),
   isSwap: z.boolean().optional(),
-  moveNumber: z.number().int(), // Move number esperado (anti-cheat)
+  moveNumber: z.number().int(),
 });
 
 const setupGeneralSchema = z.object({
@@ -35,7 +35,6 @@ const setupGeneralSchema = z.object({
   }),
 });
 
-// Middleware de autenticação simples
 async function authenticate(request: any, reply: any) {
   try {
     await request.jwtVerify();
@@ -45,14 +44,12 @@ async function authenticate(request: any, reply: any) {
 }
 
 export async function gameRoutes(fastify: FastifyInstance) {
-    // POST /api/games - Criar partida
   fastify.post('/', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { inviteCode } = createGameSchema.parse(request.body);
 
     const game = await gameService.createGame(fastify.prisma, userId, inviteCode);
 
-    // Criador sempre é brancas
     return { 
       game: {
         ...game,
@@ -61,17 +58,14 @@ export async function gameRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // POST /api/games/join-by-code - Entrar em partida apenas pelo código
   fastify.post('/join-by-code', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { inviteCode } = joinGameSchema.parse(request.body);
 
-    // Normalizar código (uppercase e trim)
     const normalizedCode = inviteCode.toUpperCase().trim();
 
     fastify.log.info(`Tentativa de entrar no jogo com código: ${normalizedCode} (usuário: ${userId})`);
 
-    // Buscar jogo pelo código
     const game = await fastify.prisma.game.findUnique({
       where: { inviteCode: normalizedCode },
     });
@@ -83,17 +77,14 @@ export async function gameRoutes(fastify: FastifyInstance) {
 
     fastify.log.info(`Jogo encontrado: ${game.id}, status: ${game.status}, blackPlayerId: ${game.blackPlayerId}`);
 
-    // Verificar se já tem jogador preto
     if (game.blackPlayerId) {
       return reply.code(400).send({ error: 'Esta partida já está completa' });
     }
 
-    // Verificar se o usuário não é o criador da partida
     if (game.whitePlayerId === userId) {
       return reply.code(400).send({ error: 'Você já é o criador desta partida' });
     }
 
-    // Entrar na partida (passar código normalizado)
     const joinedGame = await gameService.joinGame(fastify.prisma, game.id, userId, normalizedCode);
 
     if (!joinedGame) {
@@ -105,12 +96,11 @@ export async function gameRoutes(fastify: FastifyInstance) {
     return { 
       game: {
         ...joinedGame,
-        playerColor: 'black' as const, // Segundo jogador sempre é pretas
+        playerColor: 'black' as const,
       }
     };
   });
 
-  // POST /api/games/:id/join - Entrar em partida
   fastify.post('/:id/join', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { id } = request.params as { id: string };
@@ -122,7 +112,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Game not found or invalid invite code' });
     }
 
-    // Determinar cor do jogador
     const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
 
     return { 
@@ -133,7 +122,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // GET /api/games/:id - Obter estado da partida
   fastify.get('/:id', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { id } = request.params as { id: string };
@@ -151,12 +139,10 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Game not found' });
     }
 
-    // Verificar se usuário é participante
     if (game.whitePlayerId !== userId && game.blackPlayerId !== userId) {
       return reply.code(403).send({ error: 'Not a participant' });
     }
 
-    // Determinar cor do jogador atual
     const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
 
     const gameState = deserializeState(game.gameState as any);
@@ -173,13 +159,40 @@ export async function gameRoutes(fastify: FastifyInstance) {
         inviteCode: game.inviteCode,
         createdAt: game.createdAt,
         updatedAt: game.updatedAt,
-        playerColor, // Adicionar cor do jogador atual
+        playerColor,
       },
       gameState,
     };
   });
 
-  // POST /api/games/:id/setup - Setup do general
+  fastify.post('/:id/coinflip', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as any).userId;
+    const { id } = request.params as { id: string };
+
+    const result = await gameService.doCoinflip(fastify.prisma, id, userId);
+
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    if (!result.game) {
+      return reply.code(500).send({ error: 'Game not found after coinflip' });
+    }
+
+    const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
+
+    return {
+      game: {
+        ...result.game,
+        playerColor,
+      },
+      gameState: result.gameState,
+      coinflipDone: result.coinflipDone,
+      coinflipResult: result.coinflipResult,
+      currentTurn: result.currentTurn,
+    };
+  });
+
   fastify.post('/:id/setup', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { id } = request.params as { id: string };
@@ -200,7 +213,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Game not found after setup' });
     }
 
-    // Determinar cor do jogador
     const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
 
     return { 
@@ -212,7 +224,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // POST /api/games/:id/moves - Fazer jogada
   fastify.post('/:id/moves', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { id } = request.params as { id: string };
@@ -239,7 +250,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Game not found after move' });
     }
 
-    // Determinar cor do jogador
     const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
 
     return {
@@ -252,7 +262,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // GET /api/games - Listar partidas do usuário
   fastify.get('/', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
 

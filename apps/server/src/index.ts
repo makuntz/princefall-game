@@ -12,12 +12,11 @@ const fastify = Fastify({
   logger: true,
 });
 
-// Plugins
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
   : [
       'http://localhost:3000',
-      'http://localhost:5173', // Vite dev server padrão
+      'http://localhost:5173',
       'https://princefall-game-c4i256t2p-makuntzs-projects.vercel.app',
       'https://princefall-game-web.vercel.app'
     ];
@@ -32,15 +31,12 @@ fastify.register(jwt, {
   secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
 });
 
-// Decorators
 fastify.decorate('prisma', prisma);
 
-// Routes
 fastify.register(authRoutes, { prefix: '/api/auth' });
 fastify.register(gameRoutes, { prefix: '/api/games' });
 fastify.register(leaderboardRoutes, { prefix: '/api/leaderboard' });
 
-// Health check
 fastify.get('/health', async () => {
   return { status: 'ok' };
 });
@@ -58,7 +54,6 @@ const start = async () => {
 
 start();
 
-// Graceful shutdown
 process.on('SIGTERM', async () => {
   await fastify.close();
   await prisma.$disconnect();

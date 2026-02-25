@@ -35,8 +35,8 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     setPhase('coinflip');
   };
 
-  const handleCoinflipResult = (starter: 'white' | 'black') => {
-    // Atualizar o currentTurn no gameState
+  const handleCoinflipResult = () => {
+    const starter: 'white' | 'black' = Math.random() < 0.5 ? 'white' : 'black';
     const updatedState = {
       ...gameState,
       currentTurn: starter,
@@ -49,7 +49,6 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
   const handleCellClick = (pos: Position) => {
     if (gameState.status !== 'playing' || phase !== 'playing') return;
     
-    // Garantir sincronização entre currentPlayer e gameState.currentTurn
     if (currentPlayer !== gameState.currentTurn) {
       console.warn('Sincronizando currentPlayer com gameState.currentTurn');
       setCurrentPlayer(gameState.currentTurn);
@@ -61,7 +60,6 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     }
 
     if (selectedPos) {
-      // Fazer movimento
       const legalMoves = getLegalMoves(gameState, selectedPos);
       const isValidMove = legalMoves.some(m => m.col === pos.col && m.row === pos.row);
 
@@ -86,14 +84,12 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       setGameState(newState);
       setSelectedPos(null);
 
-      // Alternar jogador
       if (newState.status === 'playing') {
         setCurrentPlayer(newState.currentTurn);
       } else {
         setPhase('finished');
       }
     } else {
-      // Selecionar peça
       const piece = gameState.board.get(positionToString(pos));
       if (piece && piece.color === currentPlayer) {
         setSelectedPos(pos);
@@ -210,7 +206,6 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     );
   }
 
-  // Game screen
   const piece = selectedPos ? gameState.board.get(positionToString(selectedPos)) : null;
   const canSwapButton = gameState.status === 'playing' &&
     (currentPlayer === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);

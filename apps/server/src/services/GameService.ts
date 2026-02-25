@@ -11,15 +11,11 @@ import {
 import { randomBytes } from 'crypto';
 
 export class GameService {
-  /**
-   * Cria uma nova partida
-   */
   async createGame(
     prisma: PrismaClient,
     whitePlayerId: string,
     customInviteCode?: string
   ) {
-    // Normalizar código (uppercase e trim) se fornecido, senão gerar novo
     const inviteCode = customInviteCode 
       ? customInviteCode.toUpperCase().trim() 
       : this.generateInviteCode();
@@ -42,9 +38,6 @@ export class GameService {
     return game;
   }
 
-  /**
-   * Entra em uma partida existente
-   */
   async joinGame(
     prisma: PrismaClient,
     gameId: string,
@@ -59,13 +52,12 @@ export class GameService {
       return null;
     }
 
-    // Comparar códigos de forma case-insensitive
     if (game.inviteCode.toUpperCase().trim() !== inviteCode.toUpperCase().trim()) {
       return null;
     }
 
     if (game.blackPlayerId) {
-      return null; // Já tem jogador preto
+      return null;
     }
 
     const updatedGame = await prisma.game.update({
@@ -83,9 +75,6 @@ export class GameService {
     return updatedGame;
   }
 
-  /**
-   * Setup do general (fase de preparação)
-   */
   async setupGeneral(
     prisma: PrismaClient,
     gameId: string,
@@ -101,7 +90,6 @@ export class GameService {
         return { success: false, error: 'Game not found' };
       }
 
-      // Verificar se usuário é participante
       const playerColor =
         game.whitePlayerId === playerId
           ? 'white'
@@ -113,20 +101,16 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      // Permitir setup quando status é 'waiting' (jogador branco) ou 'setup' (ambos podem fazer setup)
       if (game.status !== 'setup' && game.status !== 'waiting') {
         return { success: false, error: 'Game not in setup phase' };
       }
       
-      // Se status é 'waiting', significa que só o jogador branco entrou
-      // Nesse caso, só o jogador branco pode fazer setup
       if (game.status === 'waiting' && playerColor !== 'white') {
         return { success: false, error: 'Waiting for second player to join' };
       }
 
       const gameState = deserializeState(game.gameState as any);
 
-      // Verificar se já escolheu
       if (
         (playerColor === 'white' && gameState.whiteGeneralPosition) ||
         (playerColor === 'black' && gameState.blackGeneralPosition)
@@ -134,7 +118,6 @@ export class GameService {
         return { success: false, error: 'General already placed' };
       }
 
-      // Aplicar ação
       const action: GameAction = {
         type: 'SETUP_GENERAL',
         payload: { position },
@@ -144,8 +127,6 @@ export class GameService {
       const newState = applyAction(gameState, action);
       const serialized = serializeState(newState);
 
-      // Atualizar jogo
-      // Se estava 'waiting', mudar para 'setup' (ou 'playing' se ambos já escolheram)
       const newStatus = game.status === 'waiting' ? (newState.status === 'playing' ? 'playing' : 'setup') : newState.status;
       
       const updatedGame = await tx.game.update({
@@ -170,9 +151,75 @@ export class GameService {
     });
   }
 
-  /**
-   * Submete uma jogada (servidor autoritativo)
-   */
+  async doCoinflip(
+    prisma: PrismaClient,
+    gameId: string,
+    playerId: string
+  ) {
+    return await prisma.$transaction(async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+      });
+
+      if (!game) {
+        return { success: false, error: 'Game not found' };
+      }
+
+      const playerColor =
+        game.whitePlayerId === playerId
+          ? 'white'
+          : game.blackPlayerId === playerId
+          ? 'black'
+          : null;
+
+      if (!playerColor) {
+        return { success: false, error: 'Not a participant' };
+      }
+
+      const gameState = deserializeState(game.gameState as any);
+
+      if (gameState.moveNumber > 0 || gameState.lastMove) {
+        return { 
+          success: true, 
+          game, 
+          gameState,
+          coinflipDone: true,
+          currentTurn: gameState.currentTurn 
+        };
+      }
+
+      const coinflipResult = Math.random() < 0.5 ? 'white' : 'black';
+      
+      const newState: GameState = {
+        ...gameState,
+        currentTurn: coinflipResult,
+      };
+
+      const serialized = serializeState(newState);
+
+      const updatedGame = await tx.game.update({
+        where: { id: gameId },
+        data: {
+          gameState: serialized as any,
+          currentTurn: coinflipResult,
+          version: game.version + 1,
+        },
+        include: {
+          whitePlayer: { select: { id: true, username: true } },
+          blackPlayer: { select: { id: true, username: true } },
+        },
+      });
+
+      return {
+        success: true,
+        game: updatedGame,
+        gameState: newState,
+        coinflipDone: false,
+        coinflipResult,
+      };
+    });
+  }
+
   async submitMove(
     prisma: PrismaClient,
     gameId: string,
@@ -194,7 +241,6 @@ export class GameService {
         return { success: false, error: 'Game not found' };
       }
 
-      // Verificar se usuário é participante
       const playerColor =
         game.whitePlayerId === playerId
           ? 'white'
@@ -210,7 +256,6 @@ export class GameService {
         return { success: false, error: 'Game not in playing phase' };
       }
 
-      // ANTI-CHEAT: Validar moveNumber esperado
       if (moveData.moveNumber !== game.moveNumber) {
         return {
           success: false,
@@ -218,7 +263,6 @@ export class GameService {
         };
       }
 
-      // ANTI-CHEAT: Verificar se já existe movimento com esse número (idempotência)
       const existingMove = await tx.gameMove.findUnique({
         where: {
           gameId_moveNumber: {
@@ -229,7 +273,6 @@ export class GameService {
       });
 
       if (existingMove) {
-        // Idempotência: retornar estado atual
         const gameState = deserializeState(game.gameState as any);
         return {
           success: true,
@@ -241,12 +284,10 @@ export class GameService {
 
       const gameState = deserializeState(game.gameState as any);
 
-      // ANTI-CHEAT: Validar turno
       if (gameState.currentTurn !== playerColor) {
         return { success: false, error: 'Not your turn' };
       }
 
-      // Se for swap, usar ação SWAP_KING_PRINCE
       let action: GameAction;
       if (moveData.isSwap) {
         action = {
@@ -274,14 +315,12 @@ export class GameService {
 
       const newState = applyAction(gameState, action);
 
-      // ANTI-CHEAT: Validar que o movimento foi aplicado (se não, é inválido)
       if (newState.moveNumber === gameState.moveNumber) {
         return { success: false, error: 'Invalid move' };
       }
 
       const serialized = serializeState(newState);
 
-      // Criar registro do movimento
       const move = await tx.gameMove.create({
         data: {
           gameId,
@@ -294,7 +333,6 @@ export class GameService {
         },
       });
 
-      // Atualizar jogo
       const updateData: any = {
         gameState: serialized,
         currentTurn: newState.currentTurn,
@@ -317,7 +355,6 @@ export class GameService {
         },
       });
 
-      // Se jogo terminou, atualizar ratings
       if (newState.status === 'finished') {
         await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId!, playerId);
       }
@@ -331,9 +368,6 @@ export class GameService {
     });
   }
 
-  /**
-   * Atualiza ratings após partida (Elo simplificado)
-   */
   private async updateRatings(
     prisma: any,
     whitePlayerId: string,
@@ -351,7 +385,7 @@ export class GameService {
       return;
     }
 
-    const K = 32; // Fator K do Elo
+    const K = 32;
     const whiteExpected = 1 / (1 + Math.pow(10, (blackRating.rating - whiteRating.rating) / 400));
     const blackExpected = 1 / (1 + Math.pow(10, (whiteRating.rating - blackRating.rating) / 400));
 
