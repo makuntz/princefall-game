@@ -141,7 +141,25 @@ export class GameService {
       };
 
       const newState = applyAction(gameState, action);
+      
+      // Debug: verificar se o board está vazio após aplicar ação
+      if (newState.board.size === 0 && gameState.board.size > 0) {
+        console.error('⚠️ Board foi limpo após applyAction!', {
+          beforeSize: gameState.board.size,
+          afterSize: newState.board.size,
+          actionType: action.type,
+        });
+      }
+      
       const serialized = serializeState(newState);
+      
+      // Debug: verificar serialização
+      if (Object.keys(serialized.board).length === 0 && newState.board.size > 0) {
+        console.error('⚠️ Board não foi serializado corretamente!', {
+          boardSize: newState.board.size,
+          serializedKeys: Object.keys(serialized.board).length,
+        });
+      }
 
       // Atualizar jogo
       // Se estava 'waiting', mudar para 'setup' (ou 'playing' se ambos já escolheram)
