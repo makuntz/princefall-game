@@ -19,7 +19,10 @@ export class GameService {
     whitePlayerId: string,
     customInviteCode?: string
   ) {
-    const inviteCode = customInviteCode || this.generateInviteCode();
+    // Normalizar código (uppercase e trim) se fornecido, senão gerar novo
+    const inviteCode = customInviteCode 
+      ? customInviteCode.toUpperCase().trim() 
+      : this.generateInviteCode();
     const initialState = createInitialState();
 
     const game = await prisma.game.create({
@@ -51,7 +54,12 @@ export class GameService {
       where: { id: gameId },
     });
 
-    if (!game || game.inviteCode !== inviteCode) {
+    if (!game) {
+      return null;
+    }
+
+    // Comparar códigos de forma case-insensitive
+    if (game.inviteCode.toUpperCase().trim() !== inviteCode.toUpperCase().trim()) {
       return null;
     }
 

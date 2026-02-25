@@ -60,14 +60,22 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const userId = (request.user as any).userId;
     const { inviteCode } = joinGameSchema.parse(request.body);
 
+    // Normalizar código (uppercase e trim)
+    const normalizedCode = inviteCode.toUpperCase().trim();
+
+    fastify.log.info(`Tentativa de entrar no jogo com código: ${normalizedCode} (usuário: ${userId})`);
+
     // Buscar jogo pelo código
     const game = await fastify.prisma.game.findUnique({
-      where: { inviteCode: inviteCode.toUpperCase().trim() },
+      where: { inviteCode: normalizedCode },
     });
 
     if (!game) {
+      fastify.log.warn(`Código não encontrado: ${normalizedCode}`);
       return reply.code(404).send({ error: 'Código de convite inválido' });
     }
+
+    fastify.log.info(`Jogo encontrado: ${game.id}, status: ${game.status}, blackPlayerId: ${game.blackPlayerId}`);
 
     // Verificar se já tem jogador preto
     if (game.blackPlayerId) {
@@ -79,13 +87,15 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'Você já é o criador desta partida' });
     }
 
-    // Entrar na partida
-    const joinedGame = await gameService.joinGame(fastify.prisma, game.id, userId, inviteCode);
+    // Entrar na partida (passar código normalizado)
+    const joinedGame = await gameService.joinGame(fastify.prisma, game.id, userId, normalizedCode);
 
     if (!joinedGame) {
+      fastify.log.error(`Erro ao entrar no jogo ${game.id} com código ${normalizedCode}`);
       return reply.code(404).send({ error: 'Erro ao entrar na partida' });
     }
 
+    fastify.log.info(`Usuário ${userId} entrou no jogo ${game.id} com sucesso`);
     return { game: joinedGame };
   });
 
