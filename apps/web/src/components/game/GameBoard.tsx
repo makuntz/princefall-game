@@ -34,9 +34,13 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
       if (gameState.status === 'setup') {
         setPhase('setup');
       } else if (gameState.status === 'playing') {
-        // Coinflip só aparece uma vez, quando transiciona de setup para playing pela primeira vez
-        if (phase === 'setup' && !coinflipResult && gameState.moveNumber === 0) {
-          setPhase('coinflip');
+        if (phase === 'setup' && !coinflipResult && gameState.moveNumber === 0 && !gameState.lastMove) {
+          if (gameState.currentTurn) {
+            setCoinflipResult(gameState.currentTurn);
+            setPhase('playing');
+          } else {
+            setPhase('coinflip');
+          }
         } else {
           setPhase('playing');
         }
@@ -75,9 +79,19 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     }
   };
 
-  const handleCoinflipResult = (starter: 'white' | 'black') => {
-    setCoinflipResult(starter);
-    setPhase('playing');
+  const handleCoinflipResult = async () => {
+    setLoading(true);
+    try {
+      const res = await api.post(`/games/${gameId}/coinflip`, {}, { token });
+      setGameState(deserializeState(res.gameState));
+      setGameInfo(res.game);
+      setCoinflipResult(res.coinflipResult || res.currentTurn);
+      setPhase('playing');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao fazer coinflip');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCellClick = async (pos: Position) => {
@@ -90,7 +104,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     }
 
     if (selectedPos) {
-      // Tentar fazer movimento
       const legalMoves = getLegalMoves(gameState, selectedPos);
       const isValidMove = legalMoves.some(
         m => m.col === pos.col && m.row === pos.row
@@ -122,7 +135,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
         setLoading(false);
       }
     } else {
-      // Selecionar peça
       const piece = gameState.board.get(positionToString(pos));
       if (piece && piece.color === gameState.currentTurn) {
         setSelectedPos(pos);
@@ -142,7 +154,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
       return;
     }
 
-    // Verificar se são rei e príncipe do mesmo jogador
     const isKingAndPrince = 
       ((piece1.type === 'king' && piece2.type === 'prince') ||
        (piece1.type === 'prince' && piece2.type === 'king')) &&
@@ -156,7 +167,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
       return;
     }
 
-    // Verificar se ainda pode trocar
     const canSwap = gameState.currentTurn === 'white' 
       ? !gameState.whiteKingSwapped 
       : !gameState.blackKingSwapped;
@@ -168,11 +178,8 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
       return;
     }
 
-    // Executar troca via API
     setLoading(true);
     try {
-      // Usar endpoint de swap (precisa ser criado no backend)
-      // Por enquanto, vamos usar o endpoint de move com flag isSwap
       const res = await api.post(
         `/games/${gameId}/moves`,
         {
@@ -228,8 +235,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     );
   }
 
-  // Determinar cor do jogador atual
-  // Prioridade: 1) prop playerColor, 2) gameInfo.playerColor do backend, 3) default 'white'
   const currentPlayerColor: 'white' | 'black' = playerColor || gameInfo?.playerColor || 'white';
 
   if (phase === 'setup') {
@@ -237,7 +242,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
       ? gameState.whiteGeneralPosition && !gameState.blackGeneralPosition
       : !gameState.whiteGeneralPosition && gameState.blackGeneralPosition;
     
-    // Verificar se está aguardando segundo jogador (status 'waiting')
     const waitingForSecondPlayer = gameInfo?.status === 'waiting' && !gameInfo?.blackPlayer;
 
     return (
@@ -312,15 +316,20 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
   }
 
   if (phase === 'coinflip') {
+    const coinflipAlreadyDone = gameState.currentTurn && gameState.moveNumber === 0;
+    
     return (
       <div className="game-container">
         <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <CoinflipScreen onResult={handleCoinflipResult} />
+        <CoinflipScreen 
+          onResult={handleCoinflipResult} 
+          coinflipDone={coinflipAlreadyDone}
+          currentTurn={gameState.currentTurn}
+        />
       </div>
     );
   }
 
-  // Game screen
   const piece = selectedPos ? gameState.board.get(positionToString(selectedPos)) : null;
   const canSwap = gameState.currentTurn === currentPlayerColor &&
     (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
@@ -332,7 +341,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
       <div className="game-layout">
         <div className="board-wrapper">
           <div className="board-container">
-            {/* Coordenadas */}
             {columns.map((col, idx) => (
               <div key={`top-${col}`} className="coord-label" style={{ gridColumn: idx + 2, gridRow: 1 }}>
                 {col}
@@ -354,7 +362,6 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
               </div>
             ))}
 
-            {/* Tabuleiro */}
             <div className="board">
               {rows.map((row) =>
                 columns.map((col) => {

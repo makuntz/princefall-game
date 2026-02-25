@@ -1,7 +1,6 @@
 import { FastifyInstance } from 'fastify';
 
 export async function leaderboardRoutes(fastify: FastifyInstance) {
-  // GET /api/leaderboard
   fastify.get('/', async (request, reply) => {
     const limit = parseInt((request.query as any)?.limit || '100', 10);
 

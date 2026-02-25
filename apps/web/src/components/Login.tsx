@@ -18,7 +18,6 @@ export function Login({ onLogin }: LoginProps) {
       return;
     }
 
-    // Validação básica de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError('Por favor, insira um email válido');
@@ -26,9 +25,7 @@ export function Login({ onLogin }: LoginProps) {
     }
 
     setLoading(true);
-    // onLogin é tratado no App.tsx, mas mostramos loading aqui
     onLogin(email);
-    // Reset loading após um delay (o App.tsx vai mudar a view)
     setTimeout(() => setLoading(false), 1000);
   };
 

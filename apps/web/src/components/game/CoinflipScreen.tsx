@@ -2,19 +2,20 @@ import { useState } from 'react';
 import './GameStyles.css';
 
 interface CoinflipScreenProps {
-  onResult: (starter: 'white' | 'black') => void;
+  onResult: () => void;
+  coinflipDone?: boolean;
+  currentTurn?: 'white' | 'black';
 }
 
-export function CoinflipScreen({ onResult }: CoinflipScreenProps) {
+export function CoinflipScreen({ onResult, coinflipDone, currentTurn }: CoinflipScreenProps) {
   const [flipping, setFlipping] = useState(false);
-  const [result, setResult] = useState<'white' | 'black' | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [result, setResult] = useState<'white' | 'black' | null>(currentTurn || null);
+  const [showResult, setShowResult] = useState(coinflipDone || false);
 
   const handleFlip = () => {
     setFlipping(true);
     setShowResult(false);
     
-    // Sortear resultado
     const flipResult = Math.random() < 0.5 ? 'white' : 'black';
     
     setTimeout(() => {
@@ -25,8 +26,8 @@ export function CoinflipScreen({ onResult }: CoinflipScreenProps) {
   };
 
   const handleStart = () => {
-    if (result) {
-      onResult(result);
+    if (result || coinflipDone) {
+      onResult();
     }
   };
 
@@ -37,7 +38,7 @@ export function CoinflipScreen({ onResult }: CoinflipScreenProps) {
         <div className="coin-face coin-white">♔</div>
         <div className="coin-face coin-black">♚</div>
       </div>
-      {!result ? (
+      {!result && !coinflipDone ? (
         <button className="flip-btn" onClick={handleFlip} disabled={flipping}>
           {flipping ? 'Girando...' : 'Jogar Moeda!'}
         </button>
