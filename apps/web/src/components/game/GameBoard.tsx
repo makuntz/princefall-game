@@ -50,18 +50,7 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     try {
       const res = await api.get(`/games/${gameId}`, { token });
       setGameInfo(res.game);
-      const deserializedState = deserializeState(res.gameState);
-      
-      // Debug apenas se board estiver vazio
-      if (deserializedState.board.size === 0 && deserializedState.status === 'playing') {
-        console.error('⚠️ Board está vazio!', {
-          status: deserializedState.status,
-          serializedBoard: res.gameState.board,
-          gameStateKeys: Object.keys(res.gameState),
-        });
-      }
-      
-      setGameState(deserializedState);
+      setGameState(deserializeState(res.gameState));
     } catch (err) {
       console.error('Error loading game:', err);
     }
