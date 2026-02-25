@@ -31,6 +31,14 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
 
   useEffect(() => {
     if (gameState) {
+      console.log('GameState changed:', {
+        status: gameState.status,
+        phase,
+        moveNumber: gameState.moveNumber,
+        boardSize: gameState.board.size,
+        coinflipResult,
+      });
+      
       if (gameState.status === 'setup') {
         setPhase('setup');
       } else if (gameState.status === 'playing') {
@@ -50,7 +58,14 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
     try {
       const res = await api.get(`/games/${gameId}`, { token });
       setGameInfo(res.game);
-      setGameState(deserializeState(res.gameState));
+      const deserializedState = deserializeState(res.gameState);
+      console.log('Game loaded:', {
+        status: deserializedState.status,
+        boardSize: deserializedState.board.size,
+        boardEntries: Array.from(deserializedState.board.entries()).slice(0, 5),
+        playerColor: res.game.playerColor,
+      });
+      setGameState(deserializedState);
     } catch (err) {
       console.error('Error loading game:', err);
     }
@@ -230,7 +245,15 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
 
   // Determinar cor do jogador atual
   // Prioridade: 1) prop playerColor, 2) gameInfo.playerColor do backend, 3) default 'white'
-  let currentPlayerColor: 'white' | 'black' = playerColor || gameInfo?.playerColor || 'white';
+  const currentPlayerColor: 'white' | 'black' = playerColor || gameInfo?.playerColor || 'white';
+  
+  console.log('Rendering GameBoard:', {
+    phase,
+    gameStateStatus: gameState.status,
+    currentPlayerColor,
+    boardSize: gameState.board.size,
+    boardKeys: Array.from(gameState.board.keys()).slice(0, 10),
+  });
 
   if (phase === 'setup') {
     const waiting = currentPlayerColor === 'white'
@@ -361,6 +384,12 @@ export function GameBoard({ gameId, token, onBack, playerColor }: GameBoardProps
                   const pos: Position = { col, row };
                   const key = positionToString(pos);
                   const squarePiece = gameState.board.get(key);
+                  
+                  // Debug: logar algumas peças encontradas
+                  if (squarePiece && (row === 1 || row === 2 || row === 8 || row === 9)) {
+                    console.log(`Piece at ${key}:`, squarePiece);
+                  }
+                  
                   const isSelected = selectedPos?.col === col && selectedPos?.row === row;
                   const isHighlight = legalMoves.some(m => m.col === col && m.row === row);
                   const isCapture = isHighlight && squarePiece !== null;
