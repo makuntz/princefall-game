@@ -65,12 +65,25 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame }: Game
     setJoining(true);
     try {
       const code = joinCode.toUpperCase().trim();
+      console.log('Tentando entrar com código:', code);
       // Buscar e entrar no jogo pelo código diretamente no backend
       const res = await api.post('/games/join-by-code', { inviteCode: code }, { token });
+      console.log('Resposta do servidor:', res);
       await onJoinGame(res.game.id, code);
     } catch (err: any) {
       console.error('Error joining game:', err);
-      const errorMessage = err.message || 'Erro ao entrar na partida';
+      // Extrair mensagem de erro do response se disponível
+      let errorMessage = 'Erro ao entrar na partida';
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.response) {
+        try {
+          const errorData = await err.response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `Erro ${err.response.status}: ${err.response.statusText}`;
+        }
+      }
       alert(errorMessage);
     } finally {
       setJoining(false);
