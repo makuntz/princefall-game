@@ -138,7 +138,7 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
             🎮 Jogar Local (Teste)
           </button>
         )}
-        {onOpenLeaderboard && (
+        {/* {onOpenLeaderboard && (
           <button
             onClick={onOpenLeaderboard}
             style={{
@@ -153,7 +153,7 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
           >
             🏆 Ranking
           </button>
-        )}
+        )} */}
 
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
           <input
