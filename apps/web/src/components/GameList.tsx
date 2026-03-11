@@ -138,6 +138,7 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
             🎮 Jogar Local (Teste)
           </button>
         )}
+        {/* TODO: Add leaderboard button */}
         {/* {onOpenLeaderboard && (
           <button
             onClick={onOpenLeaderboard}
