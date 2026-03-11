@@ -18,7 +18,7 @@ interface GameListProps {
   onOpenLeaderboard?: () => void;
 }
 
-export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode, onOpenLeaderboard }: GameListProps) {
+export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode, /*onOpenLeaderboard*/ }: GameListProps) {
   const [games, setGames] = useState<Game[]>([]);
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(true);
@@ -138,7 +138,8 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
             🎮 Jogar Local (Teste)
           </button>
         )}
-        {onOpenLeaderboard && (
+        {/* TODO: Add leaderboard button */}
+        {/* {onOpenLeaderboard && (
           <button
             onClick={onOpenLeaderboard}
             style={{
@@ -153,7 +154,7 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
           >
             🏆 Ranking
           </button>
-        )}
+        )} */}
 
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
           <input
