@@ -18,7 +18,7 @@ interface GameListProps {
   onOpenLeaderboard?: () => void;
 }
 
-export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode, onOpenLeaderboard }: GameListProps) {
+export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode, /*onOpenLeaderboard*/ }: GameListProps) {
   const [games, setGames] = useState<Game[]>([]);
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(true);
