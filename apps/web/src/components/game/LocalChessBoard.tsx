@@ -1,6 +1,6 @@
 import { GameState, Position } from '@princefall/game-core';
 import { positionToString } from '@princefall/game-core';
-import { getPieceEmoji } from './pieceEmoji';
+import { getPieceEmoji, pieceBoardClassName } from './pieceEmoji';
 import './GameStyles.css';
 
 type BoardSize = 8 | 9;
@@ -117,9 +117,7 @@ export function LocalChessBoard({
                   }}
                 >
                   {squarePiece && (
-                    <span
-                      className={`${squarePiece.color === 'white' ? 'piece-white' : 'piece-black'} ${squarePiece.color === 'black' && (squarePiece.type === 'prince' || squarePiece.type === 'general') ? 'emoji-piece' : ''}`}
-                    >
+                    <span className={pieceBoardClassName(squarePiece.color, squarePiece.type)}>
                       {getPieceEmoji(squarePiece.type, squarePiece.color)}
                     </span>
                   )}

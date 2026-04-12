@@ -13,8 +13,11 @@ function statusHeading(gameState: GameState): string {
     return `Vez das ${gameState.currentTurn === 'white' ? 'Brancas' : 'Pretas'}`;
   }
   const wr = gameState.finishedReason;
-  if (wr === 'prince_capture' || wr === 'king_capture') {
-    return `${gameState.winner === 'white' ? 'Brancas' : 'Pretas'} venceram por captura!`;
+  if (wr === 'prince_capture') {
+    return `${gameState.winner === 'white' ? 'Brancas' : 'Pretas'} venceram por captura da princesa!`;
+  }
+  if (wr === 'king_capture') {
+    return `${gameState.winner === 'white' ? 'Brancas' : 'Pretas'} venceram por captura do rei!`;
   }
   if (wr === 'timeout') {
     const side = gameState.winner === 'white' ? 'Brancas' : 'Pretas';
@@ -108,21 +111,25 @@ export function LocalGameSidePanel({
       <div className="rules">
         {imperial ? (
           <>
-            <strong>Objetivo:</strong> capturar o Príncipe inimigo.
+            <strong>Objetivo:</strong> capturar a princesa inimiga.
             <br />
-            <strong>General:</strong> não recua; 1 ou 2 casas à frente; 1 casa nas diagonais da frente.
+            <strong>General:</strong> 1 ou 2 casas para a frente + 1 casa na diagonal à frente (não recua).
             <br />
-            <strong>Rei guerreiro:</strong> 1 ou 2 casas em cruz (sem salto na segunda) e 1 casa nas diagonais.
+            <strong>Rei guerreiro:</strong> 1 ou 2 casas na cruz (sem salto) + 1 casa nas diagonais.
             <br />
-            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, vencedor por material no tabuleiro (empate se igual).
+            <strong>Princesa:</strong> move 1 casa em qualquer direção.
+            <br />
+            <strong>Troca especial:</strong> o rei pode trocar de lugar com a princesa uma vez por jogo.
+            <br />
+            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, vitória por pontuação no tabuleiro (empate se igual).
           </>
         ) : (
           <>
-            <strong>Objetivo:</strong> capturar o Rei inimigo.
+            <strong>Objetivo:</strong> dar xeque-mate no rei inimigo.
             <br />
-            <strong>Modo:</strong> movimentos clássicos no tabuleiro 8×8, sem peças nem regras do Imperial.
+            <strong>Modo:</strong> regras clássicas FIDE em tabuleiro 8×8.
             <br />
-            <strong>Tempo:</strong> 10 minutos por lado; relógio ativo só na vez do jogador; ao zerar, vitória do adversário.
+            <strong>Tempo:</strong> 10 minutos por lado; relógio só na vez do jogador; ao zerar, vitória do adversário.
           </>
         )}
       </div>

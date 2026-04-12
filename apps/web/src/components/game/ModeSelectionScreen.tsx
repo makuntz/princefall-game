@@ -28,7 +28,7 @@ export function ModeSelectionScreen({ onSelectMode, onBack }: ModeSelectionScree
           <ul className="mode-card-features">
             <li>✨ Tabuleiro 9x9 (81 casas)</li>
             <li>⚔️ General com movimentos únicos</li>
-            <li>🤴 Príncipe como objetivo</li>
+            <li>👸 Princesa como objetivo</li>
             <li>♔ Rei Guerreiro poderoso</li>
             <li>🎲 Escolha inicial do General</li>
             <li>🪙 Sorteio de quem começa</li>

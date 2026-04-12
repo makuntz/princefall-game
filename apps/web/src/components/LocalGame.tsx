@@ -14,6 +14,7 @@ import { SetupScreen } from './game/SetupScreen';
 import { CoinflipScreen } from './game/CoinflipScreen';
 import { LocalChessBoard } from './game/LocalChessBoard';
 import { LocalGameSidePanel } from './game/LocalGameSidePanel';
+import { pieceLabelPt } from './game/pieceLabels';
 import './game/GameStyles.css';
 
 /** 10 minutos por lado (imperial e tradicional no local). */
@@ -241,7 +242,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       piece1.color === gameState.currentTurn;
 
     if (!isKingAndPrince) {
-      setMessage('Selecione o Rei e o Príncipe do mesmo jogador.');
+      setMessage('Selecione o Rei e a Princesa do mesmo jogador.');
       setSelectedPos(null);
       setSwapMode(false);
       return;
@@ -356,6 +357,10 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
         ← Menu principal
       </button>
 
+      <h1 className="game-play-title">
+        {gameState.gameMode === 'imperial' ? 'XADREZ IMPERIAL' : 'XADREZ TRADICIONAL'}
+      </h1>
+
       <div className="game-layout game-layout-local">
         <LocalChessBoard
           gameState={gameState}
@@ -368,10 +373,10 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
           gameState={gameState}
           contextualMessage={
             swapMode
-              ? 'Modo troca: toque no Rei e no Príncipe do mesmo lado.'
+              ? 'Modo troca: toque no Rei e na Princesa do mesmo lado.'
               : message ||
                 (piece
-                  ? `Peça selecionada: ${positionToString(selectedPos!)} (${piece.type})`
+                  ? `Peça selecionada: ${positionToString(selectedPos!)} (${pieceLabelPt(piece.type)})`
                   : gameState.lastMove
                     ? `Última jogada: ${positionToString(gameState.lastMove.from)} → ${positionToString(gameState.lastMove.to)}`
                     : 'Selecione uma peça.')
@@ -393,8 +398,8 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
                   {swapMode
                     ? 'Cancelar troca'
                     : gameState.currentTurn === 'white'
-                      ? `Troca Rei–Príncipe (brancas): ${gameState.whiteKingSwapped ? 'usada' : 'disponível'}`
-                      : `Troca Rei–Príncipe (pretas): ${gameState.blackKingSwapped ? 'usada' : 'disponível'}`}
+                      ? `Troca Rei–Princesa (brancas): ${gameState.whiteKingSwapped ? 'usada' : 'disponível'}`
+                      : `Troca Rei–Princesa (pretas): ${gameState.blackKingSwapped ? 'usada' : 'disponível'}`}
                 </button>
               </div>
             ) : undefined

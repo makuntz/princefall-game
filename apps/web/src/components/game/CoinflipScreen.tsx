@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import './GameStyles.css';
 
 export interface CoinflipScreenProps {
@@ -20,12 +20,6 @@ export function CoinflipScreen({ phase, starter, onResolveFlip, onBeginGame }: C
   const [flipping, setFlipping] = useState(false);
   const [beginBusy, setBeginBusy] = useState(false);
   const resolved = phase === 'ready' && starter !== null;
-
-  useEffect(() => {
-    if (phase === 'ready' && starter) {
-      setFlipping(false);
-    }
-  }, [phase, starter]);
 
   const handleFlip = useCallback(async () => {
     if (flipping || resolved) return;
@@ -60,12 +54,14 @@ export function CoinflipScreen({ phase, starter, onResolveFlip, onBeginGame }: C
   return (
     <div className="coinflip-screen">
       <div className="coinflip-title">Quem Começa?</div>
-      <div
-        className={`coin ${flipping ? 'flipping' : ''}`}
-        style={showResult ? { transform: coinTransform } : undefined}
-      >
-        <div className="coin-face coin-white">X</div>
-        <div className="coin-face coin-black">I</div>
+      <div className="coin-stage">
+        <div
+          className={`coin ${flipping ? 'flipping' : ''}`}
+          style={showResult ? { transform: coinTransform } : undefined}
+        >
+          <div className="coin-face coin-white">X</div>
+          <div className="coin-face coin-black">I</div>
+        </div>
       </div>
 
       {!resolved ? (
@@ -74,14 +70,14 @@ export function CoinflipScreen({ phase, starter, onResolveFlip, onBeginGame }: C
         </button>
       ) : (
         <>
+          <button className="flip-btn" onClick={handleBegin} disabled={beginBusy}>
+            {beginBusy ? 'Abrindo...' : 'Iniciar Jogo!'}
+          </button>
           <div className={`result-message ${showResult ? 'show' : ''}`}>
             <strong>{starter === 'white' ? 'BRANCAS COMEÇAM!' : 'PRETAS COMEÇAM!'}</strong>
             <br />
             {starter === 'white' ? 'X — Xadrez' : 'I — Imperial'}
           </div>
-          <button className="flip-btn" onClick={handleBegin} disabled={beginBusy}>
-            {beginBusy ? 'Abrindo...' : 'Iniciar Jogo!'}
-          </button>
         </>
       )}
     </div>

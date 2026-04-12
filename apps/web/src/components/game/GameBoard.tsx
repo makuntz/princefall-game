@@ -3,7 +3,8 @@ import { api } from '../../api';
 import { GameState, Position, deserializeState, getLegalMoves, positionToString } from '@princefall/game-core';
 import { SetupScreen } from './SetupScreen';
 import { CoinflipScreen } from './CoinflipScreen';
-import { getPieceEmoji } from './pieceEmoji';
+import { getPieceEmoji, pieceBoardClassName } from './pieceEmoji';
+import { pieceLabelPt } from './pieceLabels';
 import './GameStyles.css';
 
 interface GameBoardProps {
@@ -155,7 +156,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
       piece1.color === gameState.currentTurn;
 
     if (!isKingAndPrince) {
-      alert('Selecione o Rei e o Príncipe do mesmo jogador para trocar!');
+      alert('Selecione o Rei e a Princesa do mesmo jogador para trocar!');
       setSelectedPos(null);
       setSwapMode(false);
       return;
@@ -377,7 +378,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
                     : 'Tempo esgotado'
                   : finishedReason === 'king_capture'
                     ? 'Rei capturado'
-                    : 'Captura do Príncipe'}
+                    : 'Captura da princesa'}
               </div>
             </div>
           ) : (
@@ -460,7 +461,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
                         className={`square ${isLight ? 'light' : 'dark'}`}
                       >
                         {squarePiece && (
-                          <span className={squarePiece.color === 'white' ? 'piece-white' : 'piece-black'}>
+                          <span className={pieceBoardClassName(squarePiece.color, squarePiece.type)}>
                             {getPieceEmoji(squarePiece.type, squarePiece.color)}
                           </span>
                         )}
@@ -483,7 +484,11 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
   return (
     <div className="game-container">
       <button className="back-btn" onClick={onBack}>← Voltar</button>
-      
+
+      <h1 className="game-play-title">
+        {gameState.gameMode === 'imperial' ? 'XADREZ IMPERIAL' : 'XADREZ TRADICIONAL'}
+      </h1>
+
       <div className="game-layout">
         <div className="board-wrapper">
           <div className="board-container">
@@ -526,7 +531,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
                       onClick={() => handleCellClick(pos)}
                     >
                       {squarePiece && (
-                        <span className={squarePiece.color === 'white' ? 'piece-white' : 'piece-black'}>
+                        <span className={pieceBoardClassName(squarePiece.color, squarePiece.type)}>
                           {getPieceEmoji(squarePiece.type, squarePiece.color)}
                         </span>
                       )}
@@ -551,9 +556,9 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
 
           <div className="message">
             {swapMode 
-              ? 'Modo Troca: Selecione o Rei e o Príncipe para trocar'
+              ? 'Modo Troca: Selecione o Rei e a Princesa para trocar'
               : selectedPos 
-                ? `Peça selecionada: ${positionToString(selectedPos)} ${piece ? `(${piece.type})` : ''}`
+                ? `Peça selecionada: ${positionToString(selectedPos)} ${piece ? `(${pieceLabelPt(piece.type)})` : ''}`
                 : gameState.lastMove
                   ? `Última jogada: ${positionToString(gameState.lastMove.from)} → ${positionToString(gameState.lastMove.to)}`
                   : 'Selecione uma peça para mover'}
@@ -568,8 +573,8 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
               {swapMode 
                 ? 'Cancelar Troca'
                 : gameState.currentTurn === 'white'
-                  ? `Troca Rei-Príncipe BRANCAS: ${gameState.whiteKingSwapped ? 'Usado' : 'Disponível'}`
-                  : `Troca Rei-Príncipe PRETAS: ${gameState.blackKingSwapped ? 'Usado' : 'Disponível'}`}
+                  ? `Troca Rei-Princesa BRANCAS: ${gameState.whiteKingSwapped ? 'Usado' : 'Disponível'}`
+                  : `Troca Rei-Princesa PRETAS: ${gameState.blackKingSwapped ? 'Usado' : 'Disponível'}`}
             </button>
           </div>
 
@@ -578,11 +583,17 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
           </button>
 
           <div className="rules">
-            <strong>OBJETIVO:</strong> Capturar o Príncipe inimigo (cheque-mate)<br />
-            <strong>TROCA ESPECIAL:</strong> Rei pode trocar com Príncipe 1x por jogo<br />
-            <strong>GENERAL:</strong> Move 1 casa nas direções cardinais + 2 casas nas diagonais<br />
-            <strong>REI:</strong> Move 2 casas ortogonalmente + 1 casa diagonal<br />
-            <strong>PRÍNCIPE:</strong> Move 1 casa em qualquer direção
+            <strong>Objetivo:</strong> capturar a princesa inimiga.
+            <br />
+            <strong>General:</strong> 1 ou 2 casas para a frente + 1 casa na diagonal à frente (não recua).
+            <br />
+            <strong>Rei guerreiro:</strong> 1 ou 2 casas na cruz (sem salto) + 1 casa nas diagonais.
+            <br />
+            <strong>Princesa:</strong> move 1 casa em qualquer direção.
+            <br />
+            <strong>Troca especial:</strong> o rei pode trocar de lugar com a princesa uma vez por jogo.
+            <br />
+            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, vitória por pontuação no tabuleiro (empate se igual).
           </div>
         </div>
       </div>
