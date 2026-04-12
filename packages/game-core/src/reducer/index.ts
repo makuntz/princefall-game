@@ -1,14 +1,11 @@
-import { GameState, GameAction, Move, Position, Piece, Color } from '../types';
+import { GameState, GameAction, Position, Piece, Color } from '../types';
 import { getPieceAt, setPieceAt, getLegalMoves } from '../pieces';
 import { positionToString } from '../utils/position';
+import { resolveImperialTimeout } from '../scoring';
 
-/**
- * Cria estado inicial do jogo (antes do setup dos generais)
- */
-export function createInitialState(): GameState {
+export function createImperialInitialState(): GameState {
   const board = new Map<string, Piece>();
 
-  // Peças pretas
   setPieceAt(board, { col: 'D', row: 1 }, { type: 'king', color: 'black' });
   setPieceAt(board, { col: 'E', row: 1 }, { type: 'prince', color: 'black' });
   setPieceAt(board, { col: 'F', row: 1 }, { type: 'queen', color: 'black' });
@@ -19,7 +16,6 @@ export function createInitialState(): GameState {
   setPieceAt(board, { col: 'H', row: 2 }, { type: 'knight', color: 'black' });
   setPieceAt(board, { col: 'I', row: 2 }, { type: 'rook', color: 'black' });
 
-  // Peças brancas
   setPieceAt(board, { col: 'A', row: 8 }, { type: 'rook', color: 'white' });
   setPieceAt(board, { col: 'B', row: 8 }, { type: 'knight', color: 'white' });
   setPieceAt(board, { col: 'C', row: 8 }, { type: 'bishop', color: 'white' });
@@ -30,32 +26,60 @@ export function createInitialState(): GameState {
   setPieceAt(board, { col: 'E', row: 9 }, { type: 'prince', color: 'white' });
   setPieceAt(board, { col: 'F', row: 9 }, { type: 'king', color: 'white' });
 
-  // Peões pretos (linha 3) - serão removidos na posição do general
-  for (let col of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const) {
+  for (const col of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const) {
     setPieceAt(board, { col, row: 3 }, { type: 'pawn', color: 'black', hasMoved: false });
   }
 
-  // Peões brancos (linha 7) - serão removidos na posição do general
-  for (let col of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const) {
+  for (const col of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const) {
     setPieceAt(board, { col, row: 7 }, { type: 'pawn', color: 'white', hasMoved: false });
   }
 
   return {
+    gameMode: 'imperial',
     board,
-    currentTurn: 'white', // White começa após setup
+    currentTurn: 'white',
     moveNumber: 0,
     whiteKingSwapped: false,
     blackKingSwapped: false,
     status: 'setup',
+    coinflipResolved: false,
   };
 }
 
-/**
- * Aplica ação ao estado, retornando novo estado imutável
- */
+/** Standard 8×8 layout (white ranks 1–2), matching reference HTML. */
+export function createTraditionalInitialState(): GameState {
+  const board = new Map<string, Piece>();
+
+  const back = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'] as const;
+  const cols: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'> = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+  for (let i = 0; i < 8; i++) {
+    setPieceAt(board, { col: cols[i], row: 1 }, { type: back[i], color: 'white', hasMoved: false });
+    setPieceAt(board, { col: cols[i], row: 2 }, { type: 'pawn', color: 'white', hasMoved: false });
+    setPieceAt(board, { col: cols[i], row: 7 }, { type: 'pawn', color: 'black', hasMoved: false });
+    setPieceAt(board, { col: cols[i], row: 8 }, { type: back[i], color: 'black', hasMoved: false });
+  }
+
+  return {
+    gameMode: 'traditional',
+    board,
+    currentTurn: 'white',
+    moveNumber: 0,
+    whiteKingSwapped: false,
+    blackKingSwapped: false,
+    status: 'playing',
+    coinflipResolved: true,
+  };
+}
+
+/** @deprecated Use createImperialInitialState — kept for server compatibility. */
+export function createInitialState(): GameState {
+  return createImperialInitialState();
+}
+
 export function applyAction(state: GameState, action: GameAction): GameState {
   if (state.status === 'finished') {
-    return state; // Não permite ações em jogo finalizado
+    return state;
   }
 
   switch (action.type) {
@@ -65,13 +89,20 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyMove(state, action);
     case 'SWAP_KING_PRINCE':
       return applySwapKingPrince(state, action);
+    case 'RESOLVE_COINFLIP':
+      return applyResolveCoinflip(state, action);
+    case 'BEGIN_PLAYING':
+      return applyBeginPlaying(state);
+    case 'FORFEIT_ON_TIME':
+      return applyForfeitOnTime(state, action);
     default:
       return state;
   }
 }
 
 function applySetupGeneral(state: GameState, action: GameAction): GameState {
-  if (state.status !== 'setup') {
+  if (action.type !== 'SETUP_GENERAL') return state;
+  if (state.gameMode !== 'imperial' || state.status !== 'setup') {
     return state;
   }
 
@@ -81,13 +112,11 @@ function applySetupGeneral(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  // Validar posição permitida
   const allowedRow = playerColor === 'white' ? 7 : 3;
   if (position.row !== allowedRow) {
     return state;
   }
 
-  // Verificar se já foi escolhido
   if (playerColor === 'white' && state.whiteGeneralPosition) {
     return state;
   }
@@ -96,11 +125,8 @@ function applySetupGeneral(state: GameState, action: GameAction): GameState {
   }
 
   const newBoard = new Map(state.board);
-  
-  // Remover peão da posição escolhida
+
   setPieceAt(newBoard, position, null);
-  
-  // Adicionar general
   setPieceAt(newBoard, position, {
     type: 'general',
     color: playerColor,
@@ -117,16 +143,77 @@ function applySetupGeneral(state: GameState, action: GameAction): GameState {
     newState.blackGeneralPosition = position;
   }
 
-  // Verificar se ambos escolheram (transição para 'playing')
   if (newState.whiteGeneralPosition && newState.blackGeneralPosition) {
-    newState.status = 'playing';
-    newState.currentTurn = 'white'; // White começa
+    newState.status = 'coinflip';
+    newState.coinflipResolved = false;
   }
 
   return newState;
 }
 
+function applyResolveCoinflip(state: GameState, action: GameAction): GameState {
+  if (action.type !== 'RESOLVE_COINFLIP') return state;
+  if (state.status !== 'coinflip') {
+    return state;
+  }
+  if (state.coinflipResolved) {
+    return state;
+  }
+
+  return {
+    ...state,
+    currentTurn: action.payload.starter,
+    status: 'ready',
+    coinflipResolved: true,
+  };
+}
+
+function applyBeginPlaying(state: GameState): GameState {
+  if (state.status !== 'ready' || !state.coinflipResolved) {
+    return state;
+  }
+
+  return {
+    ...state,
+    status: 'playing',
+  };
+}
+
+function applyForfeitOnTime(state: GameState, action: GameAction): GameState {
+  if (action.type !== 'FORFEIT_ON_TIME') return state;
+  if (state.status !== 'playing') {
+    return state;
+  }
+
+  const { timedOutColor } = action.payload;
+
+  if (state.gameMode === 'imperial') {
+    const { winner, finishedReason } = resolveImperialTimeout(state, timedOutColor);
+    return {
+      ...state,
+      status: 'finished',
+      winner: winner ?? undefined,
+      finishedReason,
+      endedAt: Date.now(),
+    };
+  }
+
+  if (state.gameMode === 'traditional') {
+    const winner: Color = timedOutColor === 'white' ? 'black' : 'white';
+    return {
+      ...state,
+      status: 'finished',
+      winner,
+      finishedReason: 'timeout',
+      endedAt: Date.now(),
+    };
+  }
+
+  return state;
+}
+
 function applyMove(state: GameState, action: GameAction): GameState {
+  if (action.type !== 'MOVE') return state;
   if (state.status !== 'playing') {
     return state;
   }
@@ -137,32 +224,25 @@ function applyMove(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  // Validar turno
   if (state.currentTurn !== playerColor) {
     return state;
   }
 
-  // Validar que há peça na origem
   const piece = getPieceAt(state.board, move.from);
   if (!piece || piece.color !== playerColor) {
     return state;
   }
 
-  // Validar movimento legal
   const legalMoves = getLegalMoves(state, move.from);
-  const moveIsLegal = legalMoves.some(
-    pos => pos.col === move.to.col && pos.row === move.to.row
-  );
+  const moveIsLegal = legalMoves.some(pos => pos.col === move.to.col && pos.row === move.to.row);
 
   if (!moveIsLegal) {
     return state;
   }
 
-  // Aplicar movimento
   const newBoard = new Map(state.board);
   const capturedPiece = getPieceAt(newBoard, move.to);
 
-  // Mover peça
   setPieceAt(newBoard, move.from, null);
   const movedPiece: Piece = {
     ...piece,
@@ -170,18 +250,24 @@ function applyMove(state: GameState, action: GameAction): GameState {
   };
   setPieceAt(newBoard, move.to, movedPiece);
 
-  // Verificar se capturou príncipe (game over)
-  let newStatus: 'playing' | 'finished' = state.status;
+  let newStatus: GameState['status'] = state.status;
   let winner: Color | undefined;
   let endedAt: number | undefined;
+  let finishedReason: GameState['finishedReason'];
 
-  if (capturedPiece?.type === 'prince') {
+  if (state.gameMode === 'imperial' && capturedPiece?.type === 'prince') {
     newStatus = 'finished';
     winner = playerColor;
     endedAt = Date.now();
+    finishedReason = 'prince_capture';
+  } else if (state.gameMode === 'traditional' && capturedPiece?.type === 'king') {
+    newStatus = 'finished';
+    winner = playerColor;
+    endedAt = Date.now();
+    finishedReason = 'king_capture';
   }
 
-  const newState: GameState = {
+  return {
     ...state,
     board: newBoard,
     currentTurn: playerColor === 'white' ? 'black' : 'white',
@@ -195,13 +281,13 @@ function applyMove(state: GameState, action: GameAction): GameState {
     status: newStatus,
     winner,
     endedAt,
+    finishedReason,
   };
-
-  return newState;
 }
 
 function applySwapKingPrince(state: GameState, action: GameAction): GameState {
-  if (state.status !== 'playing') {
+  if (action.type !== 'SWAP_KING_PRINCE') return state;
+  if (state.gameMode !== 'imperial' || state.status !== 'playing') {
     return state;
   }
 
@@ -211,12 +297,10 @@ function applySwapKingPrince(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  // Validar turno
   if (state.currentTurn !== playerColor) {
     return state;
   }
 
-  // Verificar se já trocou
   if (playerColor === 'white' && state.whiteKingSwapped) {
     return state;
   }
@@ -227,7 +311,6 @@ function applySwapKingPrince(state: GameState, action: GameAction): GameState {
   const piece1 = getPieceAt(state.board, swapFrom);
   const piece2 = getPieceAt(state.board, swapTo);
 
-  // Validar que são rei e príncipe do mesmo jogador
   if (!piece1 || !piece2 || piece1.color !== playerColor || piece2.color !== playerColor) {
     return state;
   }
@@ -239,7 +322,6 @@ function applySwapKingPrince(state: GameState, action: GameAction): GameState {
     return state;
   }
 
-  // Aplicar troca
   const newBoard = new Map(state.board);
   setPieceAt(newBoard, swapFrom, piece2);
   setPieceAt(newBoard, swapTo, piece1);
@@ -265,17 +347,10 @@ function applySwapKingPrince(state: GameState, action: GameAction): GameState {
   return newState;
 }
 
-/**
- * Verifica se o jogo acabou
- */
 export function isGameOver(state: GameState): boolean {
   return state.status === 'finished';
 }
 
-/**
- * Obtém o vencedor (se houver)
- */
 export function getWinner(state: GameState): Color | null {
   return state.winner || null;
 }
-

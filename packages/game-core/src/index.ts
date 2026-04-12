@@ -8,4 +8,5 @@ export * from './utils/position';
 export * from './pieces';
 export * from './reducer';
 export * from './serialization';
+export * from './scoring';
 

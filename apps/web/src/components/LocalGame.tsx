@@ -1,17 +1,131 @@
-import { useState } from 'react';
-import { createInitialState, applyAction, GameState, GameAction, Position, getLegalMoves, positionToString } from '@princefall/game-core';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  applyAction,
+  createImperialInitialState,
+  createTraditionalInitialState,
+  GameAction,
+  GameState,
+  getLegalMoves,
+  positionToString,
+  Position,
+} from '@princefall/game-core';
+import { ModeSelectionScreen, LocalPlayChoice } from './game/ModeSelectionScreen';
 import { SetupScreen } from './game/SetupScreen';
 import { CoinflipScreen } from './game/CoinflipScreen';
+import { LocalChessBoard } from './game/LocalChessBoard';
+import { LocalGameSidePanel } from './game/LocalGameSidePanel';
 import './game/GameStyles.css';
 
-type GamePhase = 'setup-white' | 'setup-black' | 'coinflip' | 'playing' | 'finished';
+/** 10 minutos por lado (imperial e tradicional no local). */
+const MATCH_CLOCK_SECONDS = 600;
 
 export function LocalGame({ onBack }: { onBack: () => void }) {
-  const [gameState, setGameState] = useState<GameState>(createInitialState());
-  const [phase, setPhase] = useState<GamePhase>('setup-white');
+  const [menu, setMenu] = useState(true);
+  const [lastMode, setLastMode] = useState<LocalPlayChoice>('imperial');
+  const [gameState, setGameState] = useState<GameState>(createImperialInitialState());
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [swapMode, setSwapMode] = useState(false);
-  const [currentPlayer, setCurrentPlayer] = useState<'white' | 'black'>('white');
+  const [message, setMessage] = useState('');
+
+  const [whiteClock, setWhiteClock] = useState(MATCH_CLOCK_SECONDS);
+  const [blackClock, setBlackClock] = useState(MATCH_CLOCK_SECONDS);
+  const forfeitRef = useRef(false);
+  const stateRef = useRef(gameState);
+  stateRef.current = gameState;
+
+  const resetClocks = useCallback(() => {
+    setWhiteClock(MATCH_CLOCK_SECONDS);
+    setBlackClock(MATCH_CLOCK_SECONDS);
+    forfeitRef.current = false;
+  }, []);
+
+  const startMode = useCallback((mode: LocalPlayChoice) => {
+    setLastMode(mode);
+    setMenu(false);
+    setSelectedPos(null);
+    setSwapMode(false);
+    forfeitRef.current = false;
+    if (mode === 'traditional') {
+      setGameState(createTraditionalInitialState());
+      setMessage('Clique numa peça branca para começar.');
+      resetClocks();
+    } else {
+      setGameState(createImperialInitialState());
+      setMessage('');
+      resetClocks();
+    }
+  }, [resetClocks]);
+
+  const backToModeMenu = useCallback(() => {
+    setMenu(true);
+    setSelectedPos(null);
+    setSwapMode(false);
+    setMessage('');
+    setGameState(createImperialInitialState());
+    resetClocks();
+  }, [resetClocks]);
+
+  const resetMatch = useCallback(() => {
+    setSelectedPos(null);
+    setSwapMode(false);
+    forfeitRef.current = false;
+    resetClocks();
+    if (lastMode === 'traditional') {
+      setGameState(createTraditionalInitialState());
+      setMessage('Partida reiniciada. Vez das Brancas.');
+    } else {
+      setGameState(createImperialInitialState());
+      setMessage('');
+    }
+  }, [lastMode, resetClocks]);
+
+  const clockedModes =
+    gameState.gameMode === 'imperial' || gameState.gameMode === 'traditional';
+
+  useEffect(() => {
+    if (!clockedModes || gameState.status !== 'playing') {
+      return undefined;
+    }
+    if (gameState.moveNumber < 1) {
+      return undefined;
+    }
+    if (forfeitRef.current) {
+      return undefined;
+    }
+
+    const id = window.setInterval(() => {
+      const s = stateRef.current;
+      if (s.status !== 'playing' || (s.gameMode !== 'imperial' && s.gameMode !== 'traditional')) {
+        return;
+      }
+      setWhiteClock(w => (s.currentTurn === 'white' ? Math.max(0, w - 1) : w));
+      setBlackClock(b => (s.currentTurn === 'black' ? Math.max(0, b - 1) : b));
+    }, 1000);
+
+    return () => window.clearInterval(id);
+  }, [clockedModes, gameState.status, gameState.gameMode, gameState.moveNumber]);
+
+  useEffect(() => {
+    if (!clockedModes || gameState.status !== 'playing') {
+      return;
+    }
+    if (gameState.moveNumber < 1 || forfeitRef.current) {
+      return;
+    }
+    if (whiteClock > 0 && blackClock > 0) {
+      return;
+    }
+    const timedOut: 'white' | 'black' = whiteClock <= 0 ? 'white' : 'black';
+    forfeitRef.current = true;
+    setGameState(s =>
+      applyAction(s, {
+        type: 'FORFEIT_ON_TIME',
+        payload: { timedOutColor: timedOut },
+      })
+    );
+    setSelectedPos(null);
+    setSwapMode(false);
+  }, [whiteClock, blackClock, gameState.status, gameState.gameMode, gameState.moveNumber, clockedModes]);
 
   const handleSetupWhite = (pos: Position) => {
     const action: GameAction = {
@@ -19,9 +133,8 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       payload: { position: pos },
       playerColor: 'white',
     };
-    const newState = applyAction(gameState, action);
-    setGameState(newState);
-    setPhase('setup-black');
+    setGameState(s => applyAction(s, action));
+    setMessage('Pretas: escolham a posição do General na linha 3.');
   };
 
   const handleSetupBlack = (pos: Position) => {
@@ -30,28 +143,28 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       payload: { position: pos },
       playerColor: 'black',
     };
-    const newState = applyAction(gameState, action);
-    setGameState(newState);
-    setPhase('coinflip');
+    setGameState(s => applyAction(s, action));
+    setMessage('Cara ou coroa para definir quem começa.');
   };
 
-  const handleCoinflipResult = () => {
+  const handleResolveCoinflip = async () => {
     const starter: 'white' | 'black' = Math.random() < 0.5 ? 'white' : 'black';
-    const updatedState = {
-      ...gameState,
-      currentTurn: starter,
-    };
-    setGameState(updatedState);
-    setCurrentPlayer(starter);
-    setPhase('playing');
+    setGameState(s =>
+      applyAction(s, {
+        type: 'RESOLVE_COINFLIP',
+        payload: { starter },
+      })
+    );
+  };
+
+  const handleBeginPlaying = async () => {
+    setGameState(s => applyAction(s, { type: 'BEGIN_PLAYING' }));
+    setMessage('Clique numa peça para mover.');
   };
 
   const handleCellClick = (pos: Position) => {
-    if (gameState.status !== 'playing' || phase !== 'playing') return;
-    
-    if (currentPlayer !== gameState.currentTurn) {
-      console.warn('Sincronizando currentPlayer com gameState.currentTurn');
-      setCurrentPlayer(gameState.currentTurn);
+    if (gameState.status !== 'playing') {
+      return;
     }
 
     if (swapMode) {
@@ -64,7 +177,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       const isValidMove = legalMoves.some(m => m.col === pos.col && m.row === pos.row);
 
       if (!isValidMove) {
-        alert('Movimento inválido!');
+        setMessage('Movimento inválido.');
         setSelectedPos(null);
         return;
       }
@@ -77,28 +190,39 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
             to: pos,
           },
         },
-        playerColor: currentPlayer,
+        playerColor: gameState.currentTurn,
       };
 
       const newState = applyAction(gameState, action);
       setGameState(newState);
       setSelectedPos(null);
 
-      if (newState.status === 'playing') {
-        setCurrentPlayer(newState.currentTurn);
-      } else {
-        setPhase('finished');
+      if (newState.status === 'finished') {
+        setMessage('Fim de jogo.');
+        return;
       }
-    } else {
-      const piece = gameState.board.get(positionToString(pos));
-      if (piece && piece.color === currentPlayer) {
-        setSelectedPos(pos);
-      }
+
+      setMessage('Selecione uma peça.');
+      return;
     }
+
+    const piece = gameState.board.get(positionToString(pos));
+    if (!piece) {
+      setMessage('Casa vazia.');
+      return;
+    }
+    if (piece.color !== gameState.currentTurn) {
+      setMessage('Não é o seu turno.');
+      return;
+    }
+    setSelectedPos(pos);
+    setMessage(`Peça selecionada: ${positionToString(pos)}`);
   };
 
   const handleSwapClick = (pos: Position) => {
-    if (!selectedPos) return;
+    if (!selectedPos) {
+      return;
+    }
 
     const piece1 = gameState.board.get(positionToString(selectedPos));
     const piece2 = gameState.board.get(positionToString(pos));
@@ -106,28 +230,28 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     if (!piece1 || !piece2) {
       setSelectedPos(null);
       setSwapMode(false);
+      setMessage('Seleção cancelada.');
       return;
     }
 
-    const isKingAndPrince = 
+    const isKingAndPrince =
       ((piece1.type === 'king' && piece2.type === 'prince') ||
-       (piece1.type === 'prince' && piece2.type === 'king')) &&
+        (piece1.type === 'prince' && piece2.type === 'king')) &&
       piece1.color === piece2.color &&
-      piece1.color === currentPlayer;
+      piece1.color === gameState.currentTurn;
 
     if (!isKingAndPrince) {
-      alert('Selecione o Rei e o Príncipe do mesmo jogador para trocar!');
+      setMessage('Selecione o Rei e o Príncipe do mesmo jogador.');
       setSelectedPos(null);
       setSwapMode(false);
       return;
     }
 
-    const canSwap = currentPlayer === 'white' 
-      ? !gameState.whiteKingSwapped 
-      : !gameState.blackKingSwapped;
+    const canSwap =
+      gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped;
 
     if (!canSwap) {
-      alert('Você já usou sua troca neste jogo!');
+      setMessage('Esta troca já foi usada neste jogo.');
       setSelectedPos(null);
       setSwapMode(false);
       return;
@@ -139,206 +263,144 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
         swapFrom: selectedPos,
         swapTo: pos,
       },
-      playerColor: currentPlayer,
+      playerColor: gameState.currentTurn,
     };
 
     const newState = applyAction(gameState, action);
     setGameState(newState);
     setSelectedPos(null);
     setSwapMode(false);
-
-    if (newState.status === 'playing') {
-      setCurrentPlayer(newState.currentTurn);
-    }
+    setMessage('Troca realizada.');
   };
 
   const handleSwapMode = () => {
-    if (gameState.status !== 'playing') return;
-    
-    const canSwap = currentPlayer === 'white' 
-      ? !gameState.whiteKingSwapped 
-      : !gameState.blackKingSwapped;
-
-    if (!canSwap) {
-      alert('Você já usou sua troca neste jogo!');
+    if (gameState.gameMode !== 'imperial' || gameState.status !== 'playing') {
       return;
     }
 
-    setSwapMode(true);
+    const canSwap =
+      gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped;
+
+    if (!canSwap) {
+      setMessage('Esta troca já foi usada neste jogo.');
+      return;
+    }
+
+    setSwapMode(v => !v);
     setSelectedPos(null);
   };
 
-  const columns: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I'> = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-  const rows: Array<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9> = [9, 8, 7, 6, 5, 4, 3, 2, 1];
-
-  if (phase === 'setup-white') {
-    return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <SetupScreen
-          playerColor="white"
-          onConfirm={handleSetupWhite}
-          waiting={false}
-        />
-      </div>
-    );
-  }
-
-  if (phase === 'setup-black') {
-    return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <SetupScreen
-          playerColor="black"
-          onConfirm={handleSetupBlack}
-          waiting={false}
-        />
-      </div>
-    );
-  }
-
-  if (phase === 'coinflip') {
-    return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <CoinflipScreen onResult={handleCoinflipResult} />
-      </div>
-    );
-  }
-
   const piece = selectedPos ? gameState.board.get(positionToString(selectedPos)) : null;
-  const canSwapButton = gameState.status === 'playing' &&
-    (currentPlayer === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
-  const legalMoves = selectedPos && !swapMode ? getLegalMoves(gameState, selectedPos) : [];
+  const canSwapButton =
+    gameState.gameMode === 'imperial' &&
+    gameState.status === 'playing' &&
+    (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
+
+  const legalMoves =
+    selectedPos && !swapMode && gameState.status === 'playing' ? getLegalMoves(gameState, selectedPos) : [];
+
+  const clockActive: 'white' | 'black' | null =
+    clockedModes &&
+    gameState.status === 'playing' &&
+    gameState.moveNumber >= 1 &&
+    !forfeitRef.current
+      ? gameState.currentTurn
+      : null;
+
+  if (menu) {
+    return (
+      <ModeSelectionScreen
+        onSelectMode={startMode}
+        onBack={() => {
+          onBack();
+        }}
+      />
+    );
+  }
+
+  if (lastMode === 'imperial' && gameState.status === 'setup') {
+    const playerColor = !gameState.whiteGeneralPosition ? 'white' : 'black';
+    return (
+      <div className="game-container game-container-dark">
+        <button type="button" className="back-btn" onClick={backToModeMenu}>
+          ← Menu principal
+        </button>
+        <SetupScreen
+          playerColor={playerColor}
+          onConfirm={playerColor === 'white' ? handleSetupWhite : handleSetupBlack}
+          waiting={false}
+        />
+      </div>
+    );
+  }
+
+  if (lastMode === 'imperial' && (gameState.status === 'coinflip' || gameState.status === 'ready')) {
+    return (
+      <div className="game-container game-container-dark">
+        <button type="button" className="back-btn" onClick={backToModeMenu}>
+          ← Menu principal
+        </button>
+        <CoinflipScreen
+          phase={gameState.status === 'ready' ? 'ready' : 'coinflip'}
+          starter={gameState.status === 'ready' ? gameState.currentTurn : null}
+          onResolveFlip={handleResolveCoinflip}
+          onBeginGame={handleBeginPlaying}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="game-container">
-      <button className="back-btn" onClick={onBack}>← Voltar</button>
-      
-      <div className="game-layout">
-        <div className="board-wrapper">
-          <div className="board-container">
-            {/* Coordenadas */}
-            {columns.map((col, idx) => (
-              <div key={`top-${col}`} className="coord-label" style={{ gridColumn: idx + 2, gridRow: 1 }}>
-                {col}
+    <div className="game-container game-container-dark">
+      <button type="button" className="back-btn" onClick={backToModeMenu}>
+        ← Menu principal
+      </button>
+
+      <div className="game-layout game-layout-local">
+        <LocalChessBoard
+          gameState={gameState}
+          selectedPos={selectedPos}
+          legalMoves={legalMoves}
+          onCellClick={handleCellClick}
+        />
+
+        <LocalGameSidePanel
+          gameState={gameState}
+          contextualMessage={
+            swapMode
+              ? 'Modo troca: toque no Rei e no Príncipe do mesmo lado.'
+              : message ||
+                (piece
+                  ? `Peça selecionada: ${positionToString(selectedPos!)} (${piece.type})`
+                  : gameState.lastMove
+                    ? `Última jogada: ${positionToString(gameState.lastMove.from)} → ${positionToString(gameState.lastMove.to)}`
+                    : 'Selecione uma peça.')
+          }
+          whiteSeconds={whiteClock}
+          blackSeconds={blackClock}
+          clockActiveColor={clockActive}
+          onReset={resetMatch}
+          onBackToMenu={backToModeMenu}
+          swapControls={
+            gameState.gameMode === 'imperial' ? (
+              <div className="swap-controls">
+                <button
+                  type="button"
+                  className={`swap-btn ${swapMode ? 'active' : ''}`}
+                  onClick={handleSwapMode}
+                  disabled={!canSwapButton || gameState.status === 'finished'}
+                >
+                  {swapMode
+                    ? 'Cancelar troca'
+                    : gameState.currentTurn === 'white'
+                      ? `Troca Rei–Príncipe (brancas): ${gameState.whiteKingSwapped ? 'usada' : 'disponível'}`
+                      : `Troca Rei–Príncipe (pretas): ${gameState.blackKingSwapped ? 'usada' : 'disponível'}`}
+                </button>
               </div>
-            ))}
-            {columns.map((col, idx) => (
-              <div key={`bottom-${col}`} className="coord-label" style={{ gridColumn: idx + 2, gridRow: 11 }}>
-                {col}
-              </div>
-            ))}
-            {rows.map((row, idx) => (
-              <div key={`left-${row}`} className="coord-label" style={{ gridColumn: 1, gridRow: idx + 2 }}>
-                {row}
-              </div>
-            ))}
-            {rows.map((row, idx) => (
-              <div key={`right-${row}`} className="coord-label" style={{ gridColumn: 11, gridRow: idx + 2 }}>
-                {row}
-              </div>
-            ))}
-
-            {/* Tabuleiro */}
-            <div className="board">
-              {rows.map((row) =>
-                columns.map((col) => {
-                  const pos: Position = { col, row };
-                  const key = positionToString(pos);
-                  const squarePiece = gameState.board.get(key);
-                  const isSelected = selectedPos?.col === col && selectedPos?.row === row;
-                  const isHighlight = legalMoves.some(m => m.col === col && m.row === row);
-                  const isCapture = isHighlight && squarePiece !== null;
-                  const isLight = (columns.indexOf(col) + row) % 2 === 0;
-
-                  return (
-                    <div
-                      key={key}
-                      className={`square ${isLight ? 'light' : 'dark'} ${isSelected ? 'selected' : ''} ${isHighlight ? 'highlight' : ''} ${isCapture ? 'capture' : ''}`}
-                      onClick={() => handleCellClick(pos)}
-                    >
-                      {squarePiece && (
-                        <span className={squarePiece.color === 'white' ? 'piece-white' : 'piece-black'}>
-                          {getPieceEmoji(squarePiece.type, squarePiece.color)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="info-panel">
-          <div className={`status ${gameState.status === 'finished' ? 'game-over' : currentPlayer === 'white' ? 'turn-white' : 'turn-black'}`}>
-            {gameState.status === 'finished' 
-              ? `XEQUE-MATE! ${gameState.winner === 'white' ? 'BRANCAS' : 'PRETAS'} VENCERAM!`
-              : `Vez das ${currentPlayer === 'white' ? 'Brancas' : 'Pretas'}`}
-          </div>
-
-          <div className="message">
-            {swapMode 
-              ? 'Modo Troca: Selecione o Rei e o Príncipe para trocar'
-              : selectedPos 
-                ? `Peça selecionada: ${positionToString(selectedPos)} ${piece ? `(${piece.type})` : ''}`
-                : gameState.lastMove
-                  ? `Última jogada: ${positionToString(gameState.lastMove.from)} → ${positionToString(gameState.lastMove.to)}`
-                  : 'Selecione uma peça para mover'}
-          </div>
-
-          <div className="swap-controls">
-            <button
-              className={`swap-btn ${swapMode ? 'active' : ''}`}
-              onClick={handleSwapMode}
-              disabled={!canSwapButton || gameState.status === 'finished'}
-            >
-              {swapMode 
-                ? 'Cancelar Troca'
-                : currentPlayer === 'white'
-                  ? `Troca Rei-Príncipe BRANCAS: ${gameState.whiteKingSwapped ? 'Usado' : 'Disponível'}`
-                  : `Troca Rei-Príncipe PRETAS: ${gameState.blackKingSwapped ? 'Usado' : 'Disponível'}`}
-            </button>
-          </div>
-
-          <button className="reset-btn" onClick={() => window.location.reload()}>
-            Reiniciar Jogo
-          </button>
-
-          <div className="rules">
-            <strong>OBJETIVO:</strong> Capturar o Príncipe inimigo<br />
-            <strong>TROCA ESPECIAL:</strong> Rei pode trocar com Príncipe 1x por jogo<br />
-            <br />
-            <strong>MOVIMENTOS:</strong><br />
-            • <strong>Peão:</strong> 1 casa frente (2 na primeira), captura diagonal<br />
-            • <strong>Torre:</strong> Linha reta (horizontal/vertical)<br />
-            • <strong>Bispo:</strong> Diagonal<br />
-            • <strong>Dama:</strong> Linha reta OU diagonal<br />
-            • <strong>Cavalo:</strong> Forma de "L" (pula peças)<br />
-            • <strong>Rei:</strong> 2 casas ortogonal + 1 diagonal<br />
-            • <strong>Príncipe:</strong> 1 casa qualquer direção<br />
-            • <strong>General:</strong> 1 casa cardinais + 2 casas diagonais<br />
-            <br />
-            <strong>💡 DICA:</strong> Clique na peça para ver movimentos válidos!
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
       </div>
     </div>
   );
 }
-
-function getPieceEmoji(type: string, color: string): string {
-  const pieces: Record<string, { white: string; black: string }> = {
-    pawn: { white: '♙', black: '♟' },
-    rook: { white: '♖', black: '♜' },
-    knight: { white: '♘', black: '♞' },
-    bishop: { white: '♗', black: '♝' },
-    queen: { white: '♕', black: '♛' },
-    king: { white: '♔', black: '♚' },
-    prince: { white: '🤴', black: '🤴' },
-    general: { white: '⚔️', black: '⚔️' },
-  };
-  return pieces[type]?.[color as 'white' | 'black'] || '?';
-}
-

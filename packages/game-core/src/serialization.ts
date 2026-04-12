@@ -1,12 +1,9 @@
-import { GameState, SerializedGameState, Piece } from './types';
-import { positionToString, stringToPosition } from './utils/position';
+import { GameState, SerializedGameState, Piece, GameMode, GameLifecycleStatus } from './types';
+import { positionToString } from './utils/position';
 
-/**
- * Serializa GameState para JSON
- */
 export function serializeState(state: GameState): SerializedGameState {
-  const board: Record<string, { type: Piece['type']; color: Piece['color']; hasMoved?: boolean; canSwapWithPrince?: boolean }> = {};
-  
+  const board: SerializedGameState['board'] = {};
+
   state.board.forEach((piece, key) => {
     board[key] = {
       type: piece.type,
@@ -17,6 +14,7 @@ export function serializeState(state: GameState): SerializedGameState {
   });
 
   return {
+    gameMode: state.gameMode,
     board,
     currentTurn: state.currentTurn,
     moveNumber: state.moveNumber,
@@ -28,12 +26,11 @@ export function serializeState(state: GameState): SerializedGameState {
     winner: state.winner,
     endedAt: state.endedAt,
     lastMove: state.lastMove,
+    coinflipResolved: state.coinflipResolved,
+    finishedReason: state.finishedReason,
   };
 }
 
-/**
- * Deserializa JSON para GameState
- */
 export function deserializeState(serialized: SerializedGameState): GameState {
   const board = new Map<string, Piece>();
 
@@ -46,7 +43,19 @@ export function deserializeState(serialized: SerializedGameState): GameState {
     });
   });
 
+  const gameMode: GameMode = serialized.gameMode ?? 'imperial';
+  const rawStatus = serialized.status;
+  const status: GameLifecycleStatus =
+    rawStatus === 'playing' ||
+    rawStatus === 'finished' ||
+    rawStatus === 'setup' ||
+    rawStatus === 'coinflip' ||
+    rawStatus === 'ready'
+      ? rawStatus
+      : 'setup';
+
   return {
+    gameMode,
     board,
     currentTurn: serialized.currentTurn,
     moveNumber: serialized.moveNumber,
@@ -54,10 +63,11 @@ export function deserializeState(serialized: SerializedGameState): GameState {
     blackGeneralPosition: serialized.blackGeneralPosition,
     whiteKingSwapped: serialized.whiteKingSwapped,
     blackKingSwapped: serialized.blackKingSwapped,
-    status: serialized.status,
+    status,
     winner: serialized.winner,
     endedAt: serialized.endedAt,
     lastMove: serialized.lastMove,
+    coinflipResolved: serialized.coinflipResolved,
+    finishedReason: serialized.finishedReason,
   };
 }
-

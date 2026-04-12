@@ -449,3 +449,219 @@
   background: rgba(0, 0, 0, 0.7);
 }
 
+.game-container-dark {
+  background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0d0d0d 100%);
+  color: #d4af37;
+  position: relative;
+}
+
+.board-wrapper-centered {
+  margin: 0 auto;
+}
+
+.game-layout-local {
+  align-items: stretch;
+}
+
+.mode-selection-page {
+  min-height: 100vh;
+  padding: 48px 20px 80px;
+  text-align: center;
+  background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0d0d0d 100%);
+  color: #d4af37;
+  position: relative;
+}
+
+.mode-selection-back {
+  position: relative;
+  top: auto;
+  left: auto;
+  margin-bottom: 24px;
+}
+
+.mode-selection-title {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  letter-spacing: 0.2em;
+  margin-bottom: 8px;
+  text-shadow: 0 0 12px rgba(212, 175, 55, 0.45);
+}
+
+.mode-selection-subtitle {
+  color: #c9b037;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  font-size: 0.85rem;
+  margin-bottom: 40px;
+}
+
+.mode-selection-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  justify-content: center;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.mode-card {
+  width: min(100%, 380px);
+  border-radius: 20px;
+  padding: 32px 28px 28px;
+  cursor: pointer;
+  text-align: center;
+  border: 2px solid #2a2a2a;
+  background: linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
+  color: #d4af37;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.65);
+}
+
+.mode-card:hover {
+  transform: translateY(-6px);
+  border-color: #d4af37;
+  box-shadow: 0 16px 48px rgba(212, 175, 55, 0.25);
+}
+
+.mode-card-traditional:hover {
+  border-color: #2196f3;
+  box-shadow: 0 16px 48px rgba(33, 150, 243, 0.25);
+}
+
+.mode-card-icon {
+  font-size: 3.5rem;
+  margin-bottom: 16px;
+}
+
+.mode-card-heading {
+  font-size: 1.5rem;
+  margin-bottom: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mode-card-desc {
+  color: #c9b037;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.mode-card-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  text-align: left;
+  color: rgba(212, 175, 55, 0.85);
+  font-size: 0.85rem;
+  line-height: 1.8;
+}
+
+.mode-card-features li::before {
+  content: '◆ ';
+  color: #d4af37;
+  font-size: 0.65rem;
+}
+
+.mode-badge {
+  display: inline-block;
+  padding: 6px 18px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  font-weight: 700;
+  background: linear-gradient(135deg, #d4af37, #f4e5c3);
+  color: #000;
+}
+
+.mode-badge-classic {
+  background: linear-gradient(135deg, #2196f3, #90caf9);
+}
+
+.timer-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.timer-box {
+  flex: 1;
+  min-width: 120px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 2px solid #2a2a2a;
+  background: linear-gradient(145deg, #0d0d0d, #1a1a1a);
+  text-align: center;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.timer-box.active {
+  border-color: #d4af37;
+  box-shadow: 0 0 18px rgba(212, 175, 55, 0.35);
+}
+
+.timer-box.warning {
+  border-color: #ff9800;
+}
+
+.timer-box.danger {
+  border-color: #f44336;
+}
+
+.timer-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c9b037;
+  margin-bottom: 6px;
+}
+
+.timer-display {
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  font-weight: 800;
+  color: #d4af37;
+}
+
+.timer-box.warning .timer-display {
+  color: #ff9800;
+}
+
+.timer-box.danger .timer-display {
+  color: #f44336;
+}
+
+.score-display {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #c9b037;
+}
+
+.score-value {
+  color: #d4af37;
+  font-weight: 700;
+}
+
+.info-panel-local {
+  background: linear-gradient(145deg, #1a1a1a, #0a0a0a);
+  border: 2px solid #2a2a2a;
+  color: #d4af37;
+}
+
+.local-game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.panel-back,
+.panel-reset {
+  position: static;
+  flex: 1;
+  min-width: 140px;
+}
+
+.panel-reset {
+  width: auto;
+}
+

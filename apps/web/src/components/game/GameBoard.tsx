@@ -3,6 +3,7 @@ import { api } from '../../api';
 import { GameState, Position, deserializeState, getLegalMoves, positionToString } from '@princefall/game-core';
 import { SetupScreen } from './SetupScreen';
 import { CoinflipScreen } from './CoinflipScreen';
+import { getPieceEmoji } from './pieceEmoji';
 import './GameStyles.css';
 
 interface GameBoardProps {
@@ -13,7 +14,7 @@ interface GameBoardProps {
   onOpenLeaderboard?: () => void;
 }
 
-type GamePhase = 'waiting' | 'setup' | 'coinflip' | 'playing' | 'finished';
+type GamePhase = 'waiting' | 'setup' | 'coinflip' | 'ready' | 'playing' | 'finished';
 
 export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboard }: GameBoardProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -57,7 +58,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
     }
   };
 
-  const handleCoinflipResult = async () => {
+  const handleCoinflipResolve = async () => {
     if (!gameInfo || gameInfo.phase !== 'coinflip') return;
 
     setLoading(true);
@@ -67,6 +68,21 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
       setGameInfo(res.game);
     } catch (err: any) {
       alert(err.message || 'Erro ao fazer coinflip');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBeginPlaying = async () => {
+    if (!gameInfo || gameInfo.phase !== 'ready') return;
+
+    setLoading(true);
+    try {
+      const res = await api.post(`/games/${gameId}/begin`, {}, { token });
+      setGameState(deserializeState(res.gameState));
+      setGameInfo(res.game);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao iniciar partida');
     } finally {
       setLoading(false);
     }
@@ -302,16 +318,15 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
     );
   }
 
-  if (phase === 'coinflip') {
-    const coinflipDone = gameInfo.moveNumber > 0 || gameInfo.currentTurn !== 'white';
-    
+  if (phase === 'coinflip' || phase === 'ready') {
     return (
       <div className="game-container">
         <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <CoinflipScreen 
-          onResult={handleCoinflipResult} 
-          coinflipDone={coinflipDone}
-          currentTurn={gameInfo.currentTurn}
+        <CoinflipScreen
+          phase={phase === 'ready' ? 'ready' : 'coinflip'}
+          starter={phase === 'ready' ? gameInfo.currentTurn : null}
+          onResolveFlip={handleCoinflipResolve}
+          onBeginGame={handleBeginPlaying}
         />
       </div>
     );
@@ -326,7 +341,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
     const winnerSide = gameInfo.winnerId === white?.id ? 'Brancas' :
                        gameInfo.winnerId === black?.id ? 'Pretas' :
                        null;
-    const finishedReason = gameInfo.finishedReason || 'checkmate';
+    const finishedReason = gameInfo.finishedReason || 'prince_capture';
 
     return (
       <div className="game-container">
@@ -355,12 +370,19 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
                 ({winnerSide})
               </div>
               <div style={{ fontSize: '14px', color: '#888', marginTop: '0.5rem' }}>
-                Motivo: {finishedReason === 'timeout' ? 'Tempo esgotado' : 'Xeque-mate'}
+                Motivo:{' '}
+                {finishedReason === 'timeout' || finishedReason === 'timeout_draw'
+                  ? finishedReason === 'timeout_draw'
+                    ? 'Empate por pontuação'
+                    : 'Tempo esgotado'
+                  : finishedReason === 'king_capture'
+                    ? 'Rei capturado'
+                    : 'Captura do Príncipe'}
               </div>
             </div>
           ) : (
             <div style={{ fontSize: '18px', color: '#aaa', marginBottom: '2rem' }}>
-              Partida finalizada
+              {finishedReason === 'timeout_draw' ? 'Empate por pontuação' : 'Partida finalizada'}
             </div>
           )}
 
@@ -518,8 +540,12 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
 
         <div className="info-panel">
           <div className={`status ${gameState.status === 'finished' ? 'game-over' : gameState.currentTurn === 'white' ? 'turn-white' : 'turn-black'}`}>
-            {gameState.status === 'finished' 
-              ? `XEQUE-MATE! ${gameState.winner === 'white' ? 'BRANCAS' : 'PRETAS'} VENCERAM!`
+            {gameState.status === 'finished'
+              ? gameState.finishedReason === 'timeout_draw'
+                ? 'Empate por pontuação'
+                : gameState.winner
+                  ? `${gameState.winner === 'white' ? 'Brancas' : 'Pretas'} venceram!`
+                  : 'Fim de jogo'
               : `Vez das ${gameState.currentTurn === 'white' ? 'Brancas' : 'Pretas'}`}
           </div>
 
@@ -570,16 +596,3 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
   );
 }
 
-function getPieceEmoji(type: string, color: string): string {
-  const pieces: Record<string, { white: string; black: string }> = {
-    pawn: { white: '♙', black: '♟' },
-    rook: { white: '♖', black: '♜' },
-    knight: { white: '♘', black: '♞' },
-    bishop: { white: '♗', black: '♝' },
-    queen: { white: '♕', black: '♛' },
-    king: { white: '♔', black: '♚' },
-    prince: { white: '🤴', black: '🤴' },
-    general: { white: '⚔️', black: '⚔️' },
-  };
-  return pieces[type]?.[color as 'white' | 'black'] || '?';
-}
