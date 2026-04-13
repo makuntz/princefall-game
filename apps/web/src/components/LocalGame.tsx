@@ -361,7 +361,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
         {gameState.gameMode === 'imperial' ? 'XADREZ IMPERIAL' : 'XADREZ TRADICIONAL'}
       </h1>
 
-      <div className="game-layout game-layout-local">
+      <div className="game-layout game-layout-stacked">
         <LocalChessBoard
           gameState={gameState}
           selectedPos={selectedPos}
