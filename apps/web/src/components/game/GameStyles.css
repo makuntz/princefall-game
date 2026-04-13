@@ -619,6 +619,216 @@
   color: var(--imp-gold-soft);
 }
 
+/* Lobby online: convite + carregando / aguardando (mesma paleta do tabuleiro imperial escuro) */
+.online-lobby {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 72px 20px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.25rem;
+}
+
+.game-container-dark .online-lobby .setup-screen {
+  margin-top: 0;
+}
+
+.online-invite-card {
+  background: linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
+  padding: clamp(20px, 4vw, 28px);
+  border-radius: 16px;
+  text-align: center;
+  border: 2px solid var(--imp-border);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(212, 175, 55, 0.12);
+}
+
+.online-invite-hint {
+  font-size: 0.875rem;
+  color: var(--imp-gold-soft);
+  margin-bottom: 12px;
+  letter-spacing: 0.06em;
+  font-family: var(--imp-font-ui);
+  line-height: 1.5;
+}
+
+.online-lobby-mode-line {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--imp-gold-soft);
+  letter-spacing: 0.05em;
+  line-height: 1.5;
+  font-family: var(--imp-font-ui);
+}
+
+.online-lobby-mode-line strong {
+  color: var(--imp-gold);
+  font-weight: 700;
+}
+
+.online-invite-code {
+  font-size: clamp(1.25rem, 4.5vw, 1.75rem);
+  font-weight: 700;
+  color: var(--imp-gold);
+  letter-spacing: 0.22em;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  margin-bottom: 16px;
+  text-shadow: 0 0 18px rgba(212, 175, 55, 0.35);
+  word-break: break-all;
+}
+
+.online-invite-copy-btn {
+  padding: 10px 22px;
+  background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
+  color: var(--imp-gold);
+  border: 2px solid var(--imp-gold);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-family: var(--imp-font-ui);
+  letter-spacing: 0.08em;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.online-invite-copy-btn:hover {
+  background: linear-gradient(145deg, #2a2418, #1a1508);
+  box-shadow: 0 0 22px rgba(212, 175, 55, 0.22);
+}
+
+.online-lobby-back-btn {
+  margin-top: 8px;
+  padding: 10px 22px;
+  background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
+  color: var(--imp-gold-soft);
+  border: 2px solid var(--imp-border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-family: var(--imp-font-ui);
+  letter-spacing: 0.05em;
+  transition: all 0.2s ease;
+}
+
+.online-lobby-back-btn:hover {
+  border-color: var(--imp-gold-soft);
+  color: var(--imp-gold);
+}
+
+/* Cartão “partida finalizada” no fluxo online escuro */
+.online-finished-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 72px 16px 32px;
+}
+
+.online-finished-card {
+  max-width: 600px;
+  margin: 0 auto 1.5rem;
+  padding: clamp(1.5rem, 4vw, 2rem);
+  background: linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
+  border-radius: 16px;
+  border: 2px solid var(--imp-border);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(212, 175, 55, 0.1);
+  text-align: center;
+}
+
+.online-finished-emoji {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.3));
+}
+
+.online-finished-title {
+  font-family: var(--imp-font-display);
+  font-size: clamp(1.35rem, 4vw, 1.85rem);
+  font-weight: 800;
+  margin-bottom: 1rem;
+  color: var(--imp-gold-light);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(212, 175, 55, 0.25);
+}
+
+.online-finished-winner {
+  font-size: clamp(1.1rem, 3vw, 1.35rem);
+  color: var(--imp-gold);
+  margin-bottom: 0.35rem;
+  font-family: var(--imp-font-ui);
+}
+
+.online-finished-winner strong {
+  color: var(--imp-gold-light);
+}
+
+.online-finished-side {
+  font-size: 1rem;
+  color: var(--imp-gold-soft);
+  margin-bottom: 0.5rem;
+}
+
+.online-finished-reason {
+  font-size: 0.8rem;
+  color: rgba(244, 229, 195, 0.65);
+  margin-top: 0.5rem;
+  letter-spacing: 0.04em;
+}
+
+.online-finished-muted {
+  font-size: 1rem;
+  color: var(--imp-gold-soft);
+  margin-bottom: 1.5rem;
+}
+
+.online-finished-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.online-finished-btn {
+  padding: 12px 24px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--imp-font-ui);
+  letter-spacing: 0.06em;
+  border: 2px solid var(--imp-gold);
+  transition: all 0.2s ease;
+}
+
+.online-finished-btn--primary {
+  background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
+  color: var(--imp-gold);
+}
+
+.online-finished-btn--primary:hover {
+  background: linear-gradient(145deg, #2a2418, #1a1508);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+.online-finished-btn--ranking {
+  background: linear-gradient(145deg, #d4af37, #a68b28);
+  color: #1a1204;
+  border-color: #c9a227;
+}
+
+.online-finished-btn--ranking:hover {
+  filter: brightness(1.08);
+}
+
 .board-wrapper-centered {
   margin: 0 auto;
 }
