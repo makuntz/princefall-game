@@ -7,6 +7,7 @@ import {
   Position,
   Piece,
 } from '@princefall/game-core';
+import type { Color, GameLifecycleStatus } from '@princefall/game-core';
 import { randomBytes } from 'crypto';
 
 type BoardJson = Record<string, { type: Piece['type']; color: Piece['color']; hasMoved?: boolean; canSwapWithPrince?: boolean }>;
@@ -38,9 +39,28 @@ export class GameService {
     return board;
   }
 
+  private phaseToLifecycleStatus(phase: string): GameLifecycleStatus {
+    if (phase === 'finished') return 'finished';
+    if (phase === 'playing') return 'playing';
+    if (phase === 'ready') return 'ready';
+    if (phase === 'coinflip') return 'coinflip';
+    return 'setup';
+  }
+
   dbToGameState(game: any): GameState {
     const board = this.jsonToBoard((game.board || {}) as BoardJson);
+    const phase = String(game.phase || 'waiting');
+    const status = this.phaseToLifecycleStatus(phase);
+    const coinflipResolved = phase === 'ready' || phase === 'playing' || phase === 'finished';
+
+    let winner: Color | undefined;
+    if (game.winnerId && game.whitePlayerId) {
+      if (game.winnerId === game.whitePlayerId) winner = 'white';
+      else if (game.blackPlayerId && game.winnerId === game.blackPlayerId) winner = 'black';
+    }
+
     return {
+      gameMode: 'imperial',
       board,
       currentTurn: game.currentTurn as 'white' | 'black',
       moveNumber: game.moveNumber,
@@ -48,7 +68,11 @@ export class GameService {
       blackGeneralPosition: game.blackGeneralPos as Position | undefined,
       whiteKingSwapped: game.whiteKingSwapped || false,
       blackKingSwapped: game.blackKingSwapped || false,
-      status: game.phase === 'finished' ? 'finished' : game.phase === 'playing' ? 'playing' : 'setup',
+      status,
+      winner,
+      endedAt: game.finishedAt ? new Date(game.finishedAt).getTime() : undefined,
+      finishedReason: game.finishedReason || undefined,
+      coinflipResolved,
     };
   }
 
@@ -230,14 +254,7 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      if (game.phase !== 'coinflip') {
-        return { 
-          success: false, 
-          error: `Game not in coinflip phase. Current phase: ${game.phase}` 
-        };
-      }
-
-      if (game.moveNumber > 0) {
+      if (game.phase === 'ready') {
         const gameWithPlayers = await tx.game.findUnique({
           where: { id: gameId },
           include: {
@@ -245,21 +262,28 @@ export class GameService {
             blackPlayer: { select: { id: true, username: true } },
           },
         });
-        return { 
-          success: true, 
-          game: gameWithPlayers || game, 
+        return {
+          success: true,
+          game: gameWithPlayers || game,
           coinflipDone: true,
-          currentTurn: game.currentTurn 
+          currentTurn: game.currentTurn as Color,
+        };
+      }
+
+      if (game.phase !== 'coinflip') {
+        return {
+          success: false,
+          error: `Game not in coinflip phase. Current phase: ${game.phase}`,
         };
       }
 
       const coinflipResult = Math.random() < 0.5 ? 'white' : 'black';
-      
+
       const updatedGame = await tx.game.update({
         where: { id: gameId },
         data: {
           currentTurn: coinflipResult,
-          phase: 'playing',
+          phase: 'ready',
           version: game.version + 1,
         },
         include: {
@@ -274,6 +298,46 @@ export class GameService {
         coinflipDone: false,
         coinflipResult,
       };
+    });
+  }
+
+  async beginPlaying(prisma: PrismaClient, gameId: string, playerId: string) {
+    return await prisma.$transaction(async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+      });
+
+      if (!game) {
+        return { success: false, error: 'Game not found' };
+      }
+
+      const isPlayer =
+        game.whitePlayerId === playerId ||
+        (game.blackPlayerId && game.blackPlayerId === playerId);
+      if (!isPlayer) {
+        return { success: false, error: 'Not a participant' };
+      }
+
+      if (game.phase !== 'ready') {
+        return {
+          success: false,
+          error: `Cannot start: game phase is ${game.phase}`,
+        };
+      }
+
+      const updatedGame = await tx.game.update({
+        where: { id: gameId },
+        data: {
+          phase: 'playing',
+          version: game.version + 1,
+        },
+        include: {
+          whitePlayer: { select: { id: true, username: true } },
+          blackPlayer: { select: { id: true, username: true } },
+        },
+      });
+
+      return { success: true, game: updatedGame };
     });
   }
 
@@ -410,8 +474,15 @@ export class GameService {
 
       if (newState.status === 'finished') {
         updateData.phase = 'finished';
-        updateData.winnerId = playerId;
         updateData.finishedAt = new Date();
+        updateData.finishedReason = newState.finishedReason || 'prince_capture';
+        if (newState.winner) {
+          const winnerPlayerId =
+            newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId!;
+          updateData.winnerId = winnerPlayerId;
+        } else {
+          updateData.winnerId = null;
+        }
       }
 
       const updatedGame = await tx.game.update({
@@ -423,8 +494,10 @@ export class GameService {
         },
       });
 
-      if (newState.status === 'finished') {
-        await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId!, playerId);
+      if (newState.status === 'finished' && newState.winner && game.blackPlayerId) {
+        const winnerPlayerId =
+          newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId;
+        await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId, winnerPlayerId);
       }
 
       return {

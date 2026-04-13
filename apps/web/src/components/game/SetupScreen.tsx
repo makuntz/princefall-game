@@ -31,8 +31,8 @@ export function SetupScreen({ playerColor, onConfirm, waiting }: SetupScreenProp
       <div className="setup-screen">
         <div className="setup-title">Aguardando {playerColor === 'white' ? 'Pretas' : 'Brancas'}...</div>
         <div className="waiting-message">O outro jogador está escolhendo a posição do General</div>
-        <div style={{ marginTop: '20px', fontSize: '14px', color: '#aaa' }}>
-          💡 <strong>Dica para testar sozinho:</strong> Abra outra aba/janela do browser, faça login com outro email e entre na mesma partida usando o código de convite!
+        <div className="setup-tip">
+          💡 <strong>Dica para testar sozinho:</strong> abra outra aba ou janela, faça login com outro e-mail e entre na mesma partida com o código de convite.
         </div>
       </div>
     );

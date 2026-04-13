@@ -182,6 +182,42 @@ export async function gameRoutes(fastify: FastifyInstance) {
     };
   });
 
+  fastify.post('/:id/begin', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as any).userId;
+    const { id } = request.params as { id: string };
+
+    const result = await gameService.beginPlaying(fastify.prisma, id, userId);
+
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    if (!result.game) {
+      return reply.code(500).send({ error: 'Game not found after begin' });
+    }
+
+    const game = result.game as any;
+    const playerColor = game.whitePlayerId === userId ? 'white' : 'black';
+    const gameState = gameService.dbToGameState(game);
+    const serializedGameState = serializeState(gameState);
+
+    return {
+      game: {
+        id: game.id,
+        inviteCode: game.inviteCode,
+        phase: game.phase,
+        currentTurn: game.currentTurn,
+        moveNumber: game.moveNumber,
+        whitePlayer: game.whitePlayer || null,
+        blackPlayer: game.blackPlayer || null,
+        whiteGeneralPos: game.whiteGeneralPos,
+        blackGeneralPos: game.blackGeneralPos,
+        playerColor,
+      },
+      gameState: serializedGameState,
+    };
+  });
+
   fastify.post('/:id/coinflip', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
     const { id } = request.params as { id: string };

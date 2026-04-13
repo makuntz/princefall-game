@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import './game/GameStyles.css';
 
 interface Game {
   id: string;
@@ -93,96 +94,49 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', minHeight: '100vh', background: '#1a1a1a' }}>
-      <h1 style={{ marginBottom: '2rem', color: '#fff' }}>Minhas Partidas</h1>
+    <div className="game-list-page">
+      <h1 className="game-list-title">Minhas Partidas</h1>
 
-      {error && (
-        <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#ff4444', color: '#fff', borderRadius: '4px' }}>
-          {error}
+      {error && <div className="game-list-error">{error}</div>}
+
+      <div className="game-list-toolbar">
+        <div className="game-list-actions-row">
+          <button
+            type="button"
+            className="game-list-btn game-list-btn--primary"
+            onClick={handleCreateGame}
+            disabled={creating}
+          >
+            {creating ? 'Criando...' : 'Nova Partida Online'}
+          </button>
+          {!import.meta.env.PROD && (
+            <button
+              type="button"
+              className="game-list-btn game-list-btn--outline"
+              onClick={() => {
+                const event = new CustomEvent('startLocalGame');
+                window.dispatchEvent(event);
+              }}
+            >
+              🎮 Jogar local (teste)
+            </button>
+          )}
         </div>
-      )}
 
-      <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <button
-          onClick={handleCreateGame}
-          disabled={creating}
-          style={{
-            padding: '0.75rem 1.5rem',
-            borderRadius: '4px',
-            border: 'none',
-            background: creating ? '#666' : '#4a9eff',
-            color: '#fff',
-            cursor: creating ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold',
-            opacity: creating ? 0.7 : 1,
-          }}
-        >
-          {creating ? 'Criando...' : 'Nova Partida Online'}
-        </button>
-        {!import.meta.env.PROD && (
-          <button
-            onClick={() => {
-              const event = new CustomEvent('startLocalGame');
-              window.dispatchEvent(event);
-            }}
-            style={{
-              padding: '0.75rem 1.5rem',
-              borderRadius: '4px',
-              border: 'none',
-              background: '#4CAF50',
-              color: '#fff',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
-          >
-            🎮 Jogar Local (Teste)
-          </button>
-        )}
-        {/* TODO: Add leaderboard button */}
-        {/* {onOpenLeaderboard && (
-          <button
-            onClick={onOpenLeaderboard}
-            style={{
-              padding: '0.75rem 1.5rem',
-              borderRadius: '4px',
-              border: 'none',
-              background: '#FFD700',
-              color: '#000',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
-          >
-            🏆 Ranking
-          </button>
-        )} */}
-
-        <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
+        <div className="game-list-invite">
           <input
             type="text"
+            className="game-list-input"
             placeholder="Código de convite"
+            aria-label="Digite o código de convite para entrar numa partida"
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
-            style={{
-              flex: 1,
-              padding: '0.75rem',
-              borderRadius: '4px',
-              border: '1px solid #444',
-              background: '#1a1a1a',
-              color: '#fff',
-            }}
           />
           <button
+            type="button"
+            className="game-list-btn game-list-btn--primary game-list-btn--compact"
             onClick={handleJoinByCode}
             disabled={joining || !joinCode.trim()}
-            style={{
-              padding: '0.75rem 1.5rem',
-              borderRadius: '4px',
-              border: 'none',
-              background: joining || !joinCode.trim() ? '#666' : '#2a7a2a',
-              color: '#fff',
-              cursor: joining || !joinCode.trim() ? 'not-allowed' : 'pointer',
-              opacity: joining || !joinCode.trim() ? 0.7 : 1,
-            }}
           >
             {joining ? 'Entrando...' : 'Entrar'}
           </button>
@@ -190,46 +144,46 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#aaa' }}>
-          Carregando partidas...
-        </div>
+        <div className="game-list-loading">Carregando partidas...</div>
       ) : games.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#aaa' }}>
+        <div className="game-list-empty">
           <p>Nenhuma partida encontrada.</p>
-          <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-            Crie uma nova partida ou entre com um código de convite.
-          </p>
+          <p className="game-list-empty-hint">Crie uma nova partida ou entre com um código de convite.</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="game-list-cards">
           {games.map((game) => (
-          <div
-            key={game.id}
-            onClick={() => onSelectGame(game.id)}
-            style={{
-              padding: '1rem',
-              background: '#2a2a2a',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              border: '1px solid #444',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+            <div
+              key={game.id}
+              role="button"
+              tabIndex={0}
+              className="game-list-card"
+              onClick={() => onSelectGame(game.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelectGame(game.id);
+                }
+              }}
+            >
+              <div className="game-list-card-inner">
                 <div>
-                  <strong>Brancas:</strong> {game.whitePlayer.username}
+                  <div className="game-list-card-line">
+                    <strong>Brancas:</strong> {game.whitePlayer.username}
+                  </div>
+                  <div className="game-list-card-line">
+                    <strong>Pretas:</strong> {game.blackPlayer?.username || 'Aguardando...'}
+                  </div>
+                  <div className="game-list-card-meta">
+                    Status: {game.status} | Código: {game.inviteCode}
+                  </div>
                 </div>
-                <div>
-                  <strong>Pretas:</strong> {game.blackPlayer?.username || 'Aguardando...'}
-                </div>
-                <div style={{ marginTop: '0.5rem', color: '#aaa' }}>
-                  Status: {game.status} | Código: {game.inviteCode}
-                </div>
+                <span className="game-list-card-arrow" aria-hidden>
+                  →
+                </span>
               </div>
-              <div style={{ color: '#4a9eff' }}>→</div>
             </div>
-          </div>
-        ))}
+          ))}
         </div>
       )}
     </div>
