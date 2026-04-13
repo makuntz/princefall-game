@@ -7,6 +7,7 @@ const gameService = new GameService();
 
 const createGameSchema = z.object({
   inviteCode: z.string().optional(),
+  gameMode: z.enum(['imperial', 'traditional']).optional(),
 });
 
 const joinGameSchema = z.object({
@@ -34,10 +35,6 @@ const setupGeneralSchema = z.object({
   }),
 });
 
-const selectModeSchema = z.object({
-  gameMode: z.enum(['imperial', 'traditional']),
-});
-
 async function authenticate(request: any, reply: any) {
   try {
     await request.jwtVerify();
@@ -55,9 +52,15 @@ function turnStartedAtIso(game: { turnStartedAt?: Date | string | null }) {
 export async function gameRoutes(fastify: FastifyInstance) {
   fastify.post('/', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
-    const { inviteCode } = createGameSchema.parse(request.body);
+    const { inviteCode, gameMode: modeFromBody } = createGameSchema.parse(request.body);
+    const gameMode = modeFromBody ?? 'imperial';
 
-    const game = await gameService.createGame(fastify.prisma, userId, inviteCode);
+    const game = await gameService.createGame(
+      fastify.prisma,
+      userId,
+      inviteCode,
+      gameMode
+    );
     const gameState = gameService.dbToGameState(game);
     const serializedGameState = serializeState(gameState);
 
@@ -72,6 +75,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: null,
         whiteGeneralPos: game.whiteGeneralPos,
         blackGeneralPos: game.blackGeneralPos,
+        gameMode: game.gameMode ?? 'imperial',
         playerColor: 'white' as const,
       },
       gameState: serializedGameState,
@@ -120,6 +124,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: joinedGame.blackPlayer,
         whiteGeneralPos: joinedGame.whiteGeneralPos,
         blackGeneralPos: joinedGame.blackGeneralPos,
+        gameMode: joinedGame.gameMode ?? 'imperial',
         playerColor: 'black' as const,
       },
       gameState: serializedGameState,
@@ -184,51 +189,6 @@ export async function gameRoutes(fastify: FastifyInstance) {
         finishedReason: game.finishedReason ?? null,
         createdAt: game.createdAt,
         updatedAt: game.updatedAt,
-        playerColor,
-      },
-      gameState: serializedGameState,
-    };
-  });
-
-  fastify.post('/:id/select-mode', { preHandler: [authenticate] }, async (request, reply) => {
-    const userId = (request.user as any).userId;
-    const { id } = request.params as { id: string };
-    const { gameMode } = selectModeSchema.parse(request.body);
-
-    const result = await gameService.selectGameMode(
-      fastify.prisma,
-      id,
-      userId,
-      gameMode
-    );
-
-    if (!result.success) {
-      return reply.code(400).send({ error: result.error });
-    }
-
-    if (!result.game) {
-      return reply.code(500).send({ error: 'Game not found after mode selection' });
-    }
-
-    const gameRow = result.game as any;
-    const playerColor = gameRow.whitePlayerId === userId ? 'white' : 'black';
-    const serializedGameState = serializeState(result.gameState);
-
-    return {
-      game: {
-        id: gameRow.id,
-        inviteCode: gameRow.inviteCode,
-        phase: gameRow.phase,
-        currentTurn: gameRow.currentTurn,
-        moveNumber: gameRow.moveNumber,
-        whitePlayer: gameRow.whitePlayer || null,
-        blackPlayer: gameRow.blackPlayer || null,
-        whiteGeneralPos: gameRow.whiteGeneralPos,
-        blackGeneralPos: gameRow.blackGeneralPos,
-        gameMode: gameRow.gameMode ?? 'imperial',
-        whiteTimeMs: gameRow.whiteTimeMs ?? 300000,
-        blackTimeMs: gameRow.blackTimeMs ?? 300000,
-        turnStartedAt: turnStartedAtIso(gameRow),
         playerColor,
       },
       gameState: serializedGameState,

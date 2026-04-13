@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import {
   createImperialInitialState,
   createTraditionalInitialState,
@@ -45,7 +45,6 @@ export class GameService {
     if (phase === 'playing') return 'playing';
     if (phase === 'ready') return 'ready';
     if (phase === 'coinflip') return 'coinflip';
-    if (phase === 'mode_select') return 'setup';
     return 'setup';
   }
 
@@ -166,22 +165,27 @@ export class GameService {
   async createGame(
     prisma: PrismaClient,
     whitePlayerId: string,
-    customInviteCode?: string
+    customInviteCode?: string,
+    gameMode: 'imperial' | 'traditional' = 'imperial'
   ) {
-    const inviteCode = customInviteCode 
-      ? customInviteCode.toUpperCase().trim() 
+    const inviteCode = customInviteCode
+      ? customInviteCode.toUpperCase().trim()
       : this.generateInviteCode();
-    const initialState = createImperialInitialState();
+    const initialState =
+      gameMode === 'traditional'
+        ? createTraditionalInitialState()
+        : createImperialInitialState();
     const boardJson = this.boardToJson(initialState.board);
 
     const game = await prisma.game.create({
       data: {
         whitePlayerId,
         inviteCode,
+        gameMode,
         board: boardJson as any,
         phase: 'waiting',
-        currentTurn: 'white',
-        moveNumber: 0,
+        currentTurn: initialState.currentTurn,
+        moveNumber: initialState.moveNumber,
         version: 1,
       },
       include: {
@@ -214,11 +218,18 @@ export class GameService {
       return null;
     }
 
+    const mode =
+      String(game.gameMode || 'imperial') === 'traditional'
+        ? 'traditional'
+        : 'imperial';
+
     const updatedGame = await prisma.game.update({
       where: { id: gameId },
       data: {
         blackPlayerId,
-        phase: 'mode_select',
+        phase: mode === 'traditional' ? 'playing' : 'setup',
+        turnStartedAt: mode === 'traditional' ? new Date() : null,
+        version: game.version + 1,
       },
       include: {
         whitePlayer: { select: { id: true, username: true } },
@@ -306,96 +317,6 @@ export class GameService {
         success: true,
         game: updatedGame,
         gameState: newState,
-      };
-    });
-  }
-
-  async selectGameMode(
-    prisma: PrismaClient,
-    gameId: string,
-    playerId: string,
-    gameMode: 'imperial' | 'traditional'
-  ) {
-    return await prisma.$transaction(async (tx) => {
-      const game = await tx.game.findUnique({
-        where: { id: gameId },
-      });
-
-      if (!game) {
-        return { success: false, error: 'Game not found' };
-      }
-
-      if (game.whitePlayerId !== playerId) {
-        return { success: false, error: 'Apenas o anfitrião pode escolher o modo' };
-      }
-
-      if (game.phase !== 'mode_select') {
-        return {
-          success: false,
-          error: `Não é possível escolher o modo agora (fase: ${game.phase})`,
-        };
-      }
-
-      if (!game.blackPlayerId) {
-        return { success: false, error: 'Aguardando o segundo jogador' };
-      }
-
-      const baseData = {
-        whiteGeneralPos: Prisma.JsonNull,
-        blackGeneralPos: Prisma.JsonNull,
-        whiteKingSwapped: false,
-        blackKingSwapped: false,
-        version: game.version + 1,
-      };
-
-      if (gameMode === 'imperial') {
-        const initial = createImperialInitialState();
-        const boardJson = this.boardToJson(initial.board);
-        const updatedGame = await tx.game.update({
-          where: { id: gameId },
-          data: {
-            ...baseData,
-            gameMode: 'imperial',
-            board: boardJson as any,
-            phase: 'setup',
-            currentTurn: 'white',
-            moveNumber: 0,
-            turnStartedAt: null,
-          },
-          include: {
-            whitePlayer: { select: { id: true, username: true } },
-            blackPlayer: { select: { id: true, username: true } },
-          },
-        });
-        return {
-          success: true as const,
-          game: updatedGame,
-          gameState: this.dbToGameState(updatedGame),
-        };
-      }
-
-      const initial = createTraditionalInitialState();
-      const boardJson = this.boardToJson(initial.board);
-      const updatedGame = await tx.game.update({
-        where: { id: gameId },
-        data: {
-          ...baseData,
-          gameMode: 'traditional',
-          board: boardJson as any,
-          phase: 'playing',
-          currentTurn: initial.currentTurn,
-          moveNumber: initial.moveNumber,
-          turnStartedAt: new Date(),
-        },
-        include: {
-          whitePlayer: { select: { id: true, username: true } },
-          blackPlayer: { select: { id: true, username: true } },
-        },
-      });
-      return {
-        success: true as const,
-        game: updatedGame,
-        gameState: this.dbToGameState(updatedGame),
       };
     });
   }

@@ -10,7 +10,6 @@ import {
 } from '@princefall/game-core';
 import { SetupScreen } from './SetupScreen';
 import { CoinflipScreen } from './CoinflipScreen';
-import { ModeSelectionScreen, type LocalPlayChoice } from './ModeSelectionScreen';
 import { getPieceEmoji, pieceBoardClassName } from './pieceEmoji';
 import { pieceLabelPt } from './pieceLabels';
 import './GameStyles.css';
@@ -56,14 +55,7 @@ interface GameBoardProps {
   onOpenLeaderboard?: () => void;
 }
 
-type GamePhase =
-  | 'waiting'
-  | 'mode_select'
-  | 'setup'
-  | 'coinflip'
-  | 'ready'
-  | 'playing'
-  | 'finished';
+type GamePhase = 'waiting' | 'setup' | 'coinflip' | 'ready' | 'playing' | 'finished';
 
 const COLS_9 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const;
 const ROWS_9 = [9, 8, 7, 6, 5, 4, 3, 2, 1] as const;
@@ -166,25 +158,6 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
       setGameInfo(res.game);
     } catch (err: any) {
       alert(err.message || 'Erro ao iniciar partida');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectOnlineMode = async (mode: LocalPlayChoice) => {
-    setLoading(true);
-    try {
-      const res = await api.post(
-        `/games/${gameId}/select-mode`,
-        { gameMode: mode },
-        { token }
-      );
-      setGameState(deserializeState(res.gameState));
-      setGameInfo(res.game);
-      setSelectedPos(null);
-      setSwapMode(false);
-    } catch (err: any) {
-      alert(err.message || 'Erro ao escolher o modo de jogo');
     } finally {
       setLoading(false);
     }
@@ -341,9 +314,12 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
 
   if (!gameState || !gameInfo) {
     return (
-      <div className="game-container">
-        <div className="setup-screen">
-          <div className="setup-title">Carregando...</div>
+      <div className="game-container game-container-dark">
+        <button type="button" className="back-btn" onClick={onBack}>← Voltar</button>
+        <div className="online-lobby">
+          <div className="setup-screen">
+            <div className="setup-title">Carregando...</div>
+          </div>
         </div>
       </div>
     );
@@ -354,101 +330,36 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
 
   if (phase === 'waiting') {
     return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        {gameInfo?.inviteCode && (
-          <div style={{
-            marginBottom: '20px',
-            padding: '20px',
-            background: '#2a2a2a',
-            borderRadius: '8px',
-            textAlign: 'center',
-            border: '2px solid #4a9eff'
-          }}>
-            <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px' }}>
-              Compartilhe este código com seu oponente:
-            </div>
-            <div style={{
-              fontSize: '32px',
-              fontWeight: 'bold',
-              color: '#4a9eff',
-              letterSpacing: '4px',
-              fontFamily: 'monospace',
-              marginBottom: '10px'
-            }}>
-              {gameInfo.inviteCode}
-            </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(gameInfo.inviteCode);
-                alert('Código copiado para a área de transferência!');
-              }}
-              style={{
-                padding: '8px 16px',
-                background: '#4a9eff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              📋 Copiar Código
-            </button>
-          </div>
-        )}
-        <div className="setup-screen">
-          <div className="setup-title">Aguardando segundo jogador...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'mode_select') {
-    if (currentPlayerColor === 'white') {
-      return (
-        <>
-          <ModeSelectionScreen
-            onSelectMode={handleSelectOnlineMode}
-            onBack={onBack}
-          />
-          {loading && (
-            <div
-              style={{
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                background: 'rgba(0,0,0,0.8)',
-                color: 'white',
-                padding: '20px',
-                borderRadius: '10px',
-              }}
-            >
-              Processando...
-            </div>
-          )}
-        </>
-      );
-    }
-
-    return (
       <div className="game-container game-container-dark">
         <button type="button" className="back-btn" onClick={onBack}>← Voltar</button>
-        <div className="setup-screen" style={{ marginTop: '2rem' }}>
-          <div className="setup-title">Aguardando o anfitrião</div>
-          <p
-            style={{
-              color: '#ccc',
-              textAlign: 'center',
-              maxWidth: '480px',
-              margin: '1rem auto',
-              lineHeight: 1.5,
-            }}
-          >
-            O jogador das Brancas está escolhendo se a partida será{' '}
-            <strong>Xadrez Imperial</strong> ou <strong>Xadrez Tradicional</strong>.
-          </p>
+        <div className="online-lobby">
+          {gameInfo?.inviteCode && (
+            <div className="online-invite-card">
+              <p className="online-invite-hint">Compartilhe este código com seu oponente:</p>
+              <div className="online-invite-code">{gameInfo.inviteCode}</div>
+              <button
+                type="button"
+                className="online-invite-copy-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(gameInfo.inviteCode);
+                  alert('Código copiado para a área de transferência!');
+                }}
+              >
+                Copiar código
+              </button>
+            </div>
+          )}
+          <div className="setup-screen">
+            <div className="setup-title">Aguardando segundo jogador...</div>
+            <p className="online-lobby-mode-line">
+              Modo desta partida:{' '}
+              <strong>
+                {gameInfo.gameMode === 'traditional'
+                  ? 'Xadrez Tradicional'
+                  : 'Xadrez Imperial'}
+              </strong>
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -460,45 +371,38 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
       : !gameInfo.whiteGeneralPos && gameInfo.blackGeneralPos;
 
     return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <SetupScreen
-          playerColor={currentPlayerColor}
-          onConfirm={handleSetupGeneral}
-          waiting={!!waiting}
-        />
-        {waiting && (
-          <div style={{ marginTop: '20px', textAlign: 'center' }}>
-            <button 
-              onClick={onBack}
-              style={{
-                padding: '10px 20px',
-                background: '#666',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              Voltar para Lista de Partidas
-            </button>
-          </div>
-        )}
+      <div className="game-container game-container-dark">
+        <button type="button" className="back-btn" onClick={onBack}>← Voltar</button>
+        <div className="online-lobby" style={{ maxWidth: 720 }}>
+          <SetupScreen
+            playerColor={currentPlayerColor}
+            onConfirm={handleSetupGeneral}
+            waiting={!!waiting}
+          />
+          {waiting && (
+            <div style={{ textAlign: 'center' }}>
+              <button type="button" className="online-lobby-back-btn" onClick={onBack}>
+                Voltar para lista de partidas
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   if (phase === 'coinflip' || phase === 'ready') {
     return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        <CoinflipScreen
-          phase={phase === 'ready' ? 'ready' : 'coinflip'}
-          starter={phase === 'ready' ? gameInfo.currentTurn : null}
-          onResolveFlip={handleCoinflipResolve}
-          onBeginGame={handleBeginPlaying}
-        />
+      <div className="game-container game-container-dark">
+        <button type="button" className="back-btn" onClick={onBack}>← Voltar</button>
+        <div className="online-lobby" style={{ maxWidth: 640 }}>
+          <CoinflipScreen
+            phase={phase === 'ready' ? 'ready' : 'coinflip'}
+            starter={phase === 'ready' ? gameInfo.currentTurn : null}
+            onResolveFlip={handleCoinflipResolve}
+            onBeginGame={handleBeginPlaying}
+          />
+        </div>
       </div>
     );
   }
@@ -515,81 +419,51 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
     const finishedReason = gameInfo.finishedReason || 'prince_capture';
 
     return (
-      <div className="game-container">
-        <button className="back-btn" onClick={onBack}>← Voltar</button>
-        
-        <div style={{
-          maxWidth: '600px',
-          margin: '2rem auto',
-          padding: '2rem',
-          background: '#2a2a2a',
-          borderRadius: '12px',
-          border: '2px solid #4a9eff',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '1rem' }}>🏁</div>
-          <h1 style={{ fontSize: '32px', marginBottom: '1rem', color: '#fff' }}>
-            Partida Finalizada
-          </h1>
-          
-          {winnerName && winnerSide ? (
-            <div style={{ marginBottom: '2rem' }}>
-              <div style={{ fontSize: '24px', color: '#4a9eff', marginBottom: '0.5rem' }}>
-                Vencedor: <strong>{winnerName}</strong>
-              </div>
-              <div style={{ fontSize: '18px', color: '#aaa' }}>
-                ({winnerSide})
-              </div>
-              <div style={{ fontSize: '14px', color: '#888', marginTop: '0.5rem' }}>
-                Motivo:{' '}
-                {finishedReason === 'timeout' || finishedReason === 'timeout_draw'
-                  ? finishedReason === 'timeout_draw'
-                    ? 'Empate por pontuação'
-                    : 'Tempo esgotado'
-                  : finishedReason === 'king_capture'
-                    ? 'Rei capturado'
-                    : 'Captura da princesa'}
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: '18px', color: '#aaa', marginBottom: '2rem' }}>
-              {finishedReason === 'timeout_draw' ? 'Empate por pontuação' : 'Partida finalizada'}
-            </div>
-          )}
+      <div className="game-container game-container-dark">
+        <button type="button" className="back-btn" onClick={onBack}>← Voltar</button>
 
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={onBack}
-              style={{
-                padding: '12px 24px',
-                background: '#4a9eff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                fontWeight: 'bold'
-              }}
-            >
-              Voltar
-            </button>
-            {onOpenLeaderboard && (
-              <button
-                onClick={onOpenLeaderboard}
-                style={{
-                  padding: '12px 24px',
-                  background: '#FFD700',
-                  color: '#000',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  fontWeight: 'bold'
-                }}
-              >
-                🏆 Ver Ranking
-              </button>
+        <div className="online-finished-wrap">
+          <div className="online-finished-card">
+            <div className="online-finished-emoji" aria-hidden>🏁</div>
+            <h1 className="online-finished-title">Partida finalizada</h1>
+
+            {winnerName && winnerSide ? (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div className="online-finished-winner">
+                  Vencedor: <strong>{winnerName}</strong>
+                </div>
+                <div className="online-finished-side">({winnerSide})</div>
+                <div className="online-finished-reason">
+                  Motivo:{' '}
+                  {finishedReason === 'timeout' || finishedReason === 'timeout_draw'
+                    ? finishedReason === 'timeout_draw'
+                      ? 'Empate por pontuação'
+                      : 'Tempo esgotado'
+                    : finishedReason === 'king_capture'
+                      ? 'Rei capturado'
+                      : 'Captura da princesa'}
+                </div>
+              </div>
+            ) : (
+              <div className="online-finished-muted">
+                {finishedReason === 'timeout_draw' ? 'Empate por pontuação' : 'Partida finalizada'}
+              </div>
             )}
+
+            <div className="online-finished-actions">
+              <button type="button" className="online-finished-btn online-finished-btn--primary" onClick={onBack}>
+                Voltar
+              </button>
+              {onOpenLeaderboard && (
+                <button
+                  type="button"
+                  className="online-finished-btn online-finished-btn--ranking"
+                  onClick={onOpenLeaderboard}
+                >
+                  Ver ranking
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

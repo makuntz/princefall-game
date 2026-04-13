@@ -4,12 +4,16 @@ import { Login } from './components/Login';
 import { GameList } from './components/GameList';
 import { LocalGame } from './components/LocalGame';
 import { Leaderboard } from './components/Leaderboard';
+import { ModeSelectionScreen, type LocalPlayChoice } from './components/game/ModeSelectionScreen';
 import { api } from './api';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
-  const [view, setView] = useState<'login' | 'list' | 'game' | 'local' | 'leaderboard'>('login');
+  const [view, setView] = useState<
+    'login' | 'list' | 'game' | 'local' | 'leaderboard' | 'pickOnlineMode'
+  >('login');
+  const [creatingOnline, setCreatingOnline] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -45,18 +49,25 @@ function App() {
       });
   };
 
-  const handleCreateGame = async () => {
+  const handleStartCreateOnline = () => {
+    setView('pickOnlineMode');
+  };
+
+  const handlePickOnlineMode = async (mode: LocalPlayChoice) => {
     if (!token) {
       console.warn('Cannot create game: no token');
       return;
     }
+    setCreatingOnline(true);
     try {
-      const res = await api.post('/games', {}, { token });
+      const res = await api.post('/games', { gameMode: mode }, { token });
       setCurrentGameId(res.game.id);
       setView('game');
     } catch (err) {
       console.error('Create game error:', err);
       alert('Erro ao criar partida');
+    } finally {
+      setCreatingOnline(false);
     }
   };
 
@@ -93,7 +104,7 @@ function App() {
     return (
       <GameList
         token={token!}
-        onCreateGame={handleCreateGame}
+        onCreateGame={handleStartCreateOnline}
         onJoinGame={handleJoinGame}
         onJoinGameByCode={handleJoinGameByCode}
         onOpenLeaderboard={handleOpenLeaderboard}
@@ -102,6 +113,36 @@ function App() {
           setView('game');
         }}
       />
+    );
+  }
+
+  if (view === 'pickOnlineMode') {
+    return (
+      <>
+        <ModeSelectionScreen
+          onSelectMode={handlePickOnlineMode}
+          onBack={() => setView('list')}
+        />
+        {creatingOnline && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(0,0,0,0.85)',
+              color: '#f4e5c3',
+              padding: '20px 28px',
+              borderRadius: '12px',
+              border: '2px solid #d4af37',
+              zIndex: 9999,
+              fontFamily: 'Cinzel, serif',
+            }}
+          >
+            Criando partida...
+          </div>
+        )}
+      </>
     );
   }
 
