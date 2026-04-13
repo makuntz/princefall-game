@@ -12,6 +12,7 @@ import type { Color, GameLifecycleStatus } from '@princefall/game-core';
 import { randomBytes } from 'crypto';
 
 type BoardJson = Record<string, { type: Piece['type']; color: Piece['color']; hasMoved?: boolean; canSwapWithPrince?: boolean }>;
+const MATCH_CLOCK_MS = 10 * 60 * 1000;
 
 export class GameService {
   private boardToJson(board: Map<string, Piece>): BoardJson {
@@ -60,16 +61,13 @@ export class GameService {
 
   /**
    * Ends the game if the side to move has run out of thinking time.
-   * Heals legacy rows missing `turnStartedAt` during `playing`.
+   * Clock starts only after the first move (`turnStartedAt` present).
    */
   private async finalizeTimeoutInTx(tx: any, game: any) {
     if (!game || game.phase !== 'playing') return null;
 
     if (!game.turnStartedAt) {
-      await tx.game.update({
-        where: { id: game.id },
-        data: { turnStartedAt: new Date(), version: game.version + 1 },
-      });
+      // Match local behavior: don't tick before first move.
       return null;
     }
 
@@ -183,6 +181,8 @@ export class GameService {
         inviteCode,
         gameMode,
         board: boardJson as any,
+        whiteTimeMs: MATCH_CLOCK_MS,
+        blackTimeMs: MATCH_CLOCK_MS,
         phase: 'waiting',
         currentTurn: initialState.currentTurn,
         moveNumber: initialState.moveNumber,
@@ -228,7 +228,7 @@ export class GameService {
       data: {
         blackPlayerId,
         phase: mode === 'traditional' ? 'playing' : 'setup',
-        turnStartedAt: mode === 'traditional' ? new Date() : null,
+        turnStartedAt: null,
         version: game.version + 1,
       },
       include: {
@@ -422,7 +422,7 @@ export class GameService {
         data: {
           phase: 'playing',
           version: game.version + 1,
-          turnStartedAt: new Date(),
+          turnStartedAt: null,
         },
         include: {
           whitePlayer: { select: { id: true, username: true } },
