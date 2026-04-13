@@ -34,12 +34,22 @@ const setupGeneralSchema = z.object({
   }),
 });
 
+const selectModeSchema = z.object({
+  gameMode: z.enum(['imperial', 'traditional']),
+});
+
 async function authenticate(request: any, reply: any) {
   try {
     await request.jwtVerify();
   } catch (err) {
     reply.code(401).send({ error: 'Unauthorized' });
   }
+}
+
+function turnStartedAtIso(game: { turnStartedAt?: Date | string | null }) {
+  if (!game.turnStartedAt) return null;
+  if (typeof game.turnStartedAt === 'string') return game.turnStartedAt;
+  return game.turnStartedAt.toISOString();
 }
 
 export async function gameRoutes(fastify: FastifyInstance) {
@@ -141,14 +151,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
     const userId = (request.user as any).userId;
     const { id } = request.params as { id: string };
 
-    const game = await fastify.prisma.game.findUnique({
-      where: { id },
-      include: {
-        whitePlayer: { select: { id: true, username: true } },
-        blackPlayer: { select: { id: true, username: true } },
-        moves: { orderBy: { moveNumber: 'asc' } },
-      },
-    });
+    const game = await gameService.loadGameSyncingTimeout(fastify.prisma, id);
 
     if (!game) {
       return reply.code(404).send({ error: 'Game not found' });
@@ -173,9 +176,59 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: game.blackPlayer,
         whiteGeneralPos: game.whiteGeneralPos,
         blackGeneralPos: game.blackGeneralPos,
+        gameMode: game.gameMode ?? 'imperial',
+        whiteTimeMs: game.whiteTimeMs ?? 300000,
+        blackTimeMs: game.blackTimeMs ?? 300000,
+        turnStartedAt: turnStartedAtIso(game),
         winnerId: game.winnerId,
+        finishedReason: game.finishedReason ?? null,
         createdAt: game.createdAt,
         updatedAt: game.updatedAt,
+        playerColor,
+      },
+      gameState: serializedGameState,
+    };
+  });
+
+  fastify.post('/:id/select-mode', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as any).userId;
+    const { id } = request.params as { id: string };
+    const { gameMode } = selectModeSchema.parse(request.body);
+
+    const result = await gameService.selectGameMode(
+      fastify.prisma,
+      id,
+      userId,
+      gameMode
+    );
+
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    if (!result.game) {
+      return reply.code(500).send({ error: 'Game not found after mode selection' });
+    }
+
+    const gameRow = result.game as any;
+    const playerColor = gameRow.whitePlayerId === userId ? 'white' : 'black';
+    const serializedGameState = serializeState(result.gameState);
+
+    return {
+      game: {
+        id: gameRow.id,
+        inviteCode: gameRow.inviteCode,
+        phase: gameRow.phase,
+        currentTurn: gameRow.currentTurn,
+        moveNumber: gameRow.moveNumber,
+        whitePlayer: gameRow.whitePlayer || null,
+        blackPlayer: gameRow.blackPlayer || null,
+        whiteGeneralPos: gameRow.whiteGeneralPos,
+        blackGeneralPos: gameRow.blackGeneralPos,
+        gameMode: gameRow.gameMode ?? 'imperial',
+        whiteTimeMs: gameRow.whiteTimeMs ?? 300000,
+        blackTimeMs: gameRow.blackTimeMs ?? 300000,
+        turnStartedAt: turnStartedAtIso(gameRow),
         playerColor,
       },
       gameState: serializedGameState,
@@ -212,6 +265,10 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: game.blackPlayer || null,
         whiteGeneralPos: game.whiteGeneralPos,
         blackGeneralPos: game.blackGeneralPos,
+        gameMode: game.gameMode ?? 'imperial',
+        whiteTimeMs: game.whiteTimeMs ?? 300000,
+        blackTimeMs: game.blackTimeMs ?? 300000,
+        turnStartedAt: turnStartedAtIso(game),
         playerColor,
       },
       gameState: serializedGameState,
@@ -248,6 +305,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: gameWithPlayers.blackPlayer || null,
         whiteGeneralPos: result.game.whiteGeneralPos,
         blackGeneralPos: result.game.blackGeneralPos,
+        gameMode: result.game.gameMode ?? 'imperial',
         playerColor,
       },
       gameState: serializedGameState,
@@ -291,6 +349,7 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: result.game.blackPlayer,
         whiteGeneralPos: result.game.whiteGeneralPos,
         blackGeneralPos: result.game.blackGeneralPos,
+        gameMode: result.game.gameMode ?? 'imperial',
         playerColor,
       }, 
       gameState: serializedGameState 
@@ -323,8 +382,14 @@ export async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Game not found after move' });
     }
 
+    if (!result.gameState) {
+      return reply.code(500).send({ error: 'Missing game state after move' });
+    }
+
     const playerColor = result.game.whitePlayerId === userId ? 'white' : 'black';
     const serializedGameState = serializeState(result.gameState);
+    const movePayload =
+      'move' in result && result.move !== undefined ? { move: result.move } : {};
 
     return {
       game: {
@@ -337,10 +402,15 @@ export async function gameRoutes(fastify: FastifyInstance) {
         blackPlayer: 'blackPlayer' in result.game ? result.game.blackPlayer : null,
         whiteGeneralPos: result.game.whiteGeneralPos,
         blackGeneralPos: result.game.blackGeneralPos,
+        gameMode: result.game.gameMode ?? 'imperial',
+        whiteTimeMs: result.game.whiteTimeMs ?? 300000,
+        blackTimeMs: result.game.blackTimeMs ?? 300000,
+        turnStartedAt: turnStartedAtIso(result.game),
+        finishedReason: result.game.finishedReason ?? null,
         playerColor,
       },
       gameState: serializedGameState,
-      move: result.move,
+      ...movePayload,
     };
   });
 

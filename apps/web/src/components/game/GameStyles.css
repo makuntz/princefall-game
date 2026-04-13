@@ -327,7 +327,7 @@
 }
 
 @media (min-width: 768px) {
-  .game-layout {
+  .game-layout:not(.game-layout-stacked) {
     flex-direction: row;
     align-items: flex-start;
   }

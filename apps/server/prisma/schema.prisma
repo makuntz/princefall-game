@@ -26,6 +26,7 @@ model Game {
   whitePlayerId String
   blackPlayerId String?
   inviteCode    String    @unique
+  gameMode      String    @default("imperial")
   board         Json      @default("{}")
   currentTurn   String    @default("white")
   phase         String    @default("waiting")
