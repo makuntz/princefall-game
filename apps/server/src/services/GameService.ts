@@ -1,6 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import {
-  createInitialState,
+  createImperialInitialState,
+  createTraditionalInitialState,
   applyAction,
   GameState,
   GameAction,
@@ -44,14 +45,95 @@ export class GameService {
     if (phase === 'playing') return 'playing';
     if (phase === 'ready') return 'ready';
     if (phase === 'coinflip') return 'coinflip';
+    if (phase === 'mode_select') return 'setup';
     return 'setup';
+  }
+
+  private calcThinkingElapsedMs(game: { phase: string; turnStartedAt: Date | null }): number {
+    if (game.phase !== 'playing' || !game.turnStartedAt) return 0;
+    return Math.max(0, Date.now() - new Date(game.turnStartedAt).getTime());
+  }
+
+  private moverRemainingMs(game: any, color: Color): number {
+    const bank = color === 'white' ? game.whiteTimeMs : game.blackTimeMs;
+    return bank - this.calcThinkingElapsedMs(game);
+  }
+
+  /**
+   * Ends the game if the side to move has run out of thinking time.
+   * Heals legacy rows missing `turnStartedAt` during `playing`.
+   */
+  private async finalizeTimeoutInTx(tx: any, game: any) {
+    if (!game || game.phase !== 'playing') return null;
+
+    if (!game.turnStartedAt) {
+      await tx.game.update({
+        where: { id: game.id },
+        data: { turnStartedAt: new Date(), version: game.version + 1 },
+      });
+      return null;
+    }
+
+    const timedOutColor = game.currentTurn as Color;
+    if (this.moverRemainingMs(game, timedOutColor) > 0) return null;
+
+    const gameState = this.dbToGameState(game);
+    const newState = applyAction(gameState, {
+      type: 'FORFEIT_ON_TIME',
+      payload: { timedOutColor },
+    });
+
+    if (newState.status !== 'finished') return null;
+
+    const updateData: any = {
+      phase: 'finished',
+      finishedAt: new Date(),
+      finishedReason: newState.finishedReason,
+      turnStartedAt: null,
+      version: game.version + 1,
+    };
+
+    if (timedOutColor === 'white') {
+      updateData.whiteTimeMs = 0;
+    } else {
+      updateData.blackTimeMs = 0;
+    }
+
+    if (newState.winner) {
+      updateData.winnerId =
+        newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId!;
+    } else {
+      updateData.winnerId = null;
+    }
+
+    const updatedGame = await tx.game.update({
+      where: { id: game.id },
+      data: updateData,
+      include: {
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } },
+      },
+    });
+
+    if (newState.winner && game.blackPlayerId) {
+      const winnerPlayerId =
+        newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId;
+      await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId, winnerPlayerId);
+    }
+
+    return {
+      success: true as const,
+      game: updatedGame,
+      gameState: newState,
+    };
   }
 
   dbToGameState(game: any): GameState {
     const board = this.jsonToBoard((game.board || {}) as BoardJson);
     const phase = String(game.phase || 'waiting');
     const status = this.phaseToLifecycleStatus(phase);
-    const coinflipResolved = phase === 'ready' || phase === 'playing' || phase === 'finished';
+    const coinflipResolved =
+      phase === 'ready' || phase === 'playing' || phase === 'finished';
 
     let winner: Color | undefined;
     if (game.winnerId && game.whitePlayerId) {
@@ -59,8 +141,13 @@ export class GameService {
       else if (game.blackPlayerId && game.winnerId === game.blackPlayerId) winner = 'black';
     }
 
+    const gameMode =
+      String(game.gameMode || 'imperial') === 'traditional'
+        ? 'traditional'
+        : 'imperial';
+
     return {
-      gameMode: 'imperial',
+      gameMode,
       board,
       currentTurn: game.currentTurn as 'white' | 'black',
       moveNumber: game.moveNumber,
@@ -84,7 +171,7 @@ export class GameService {
     const inviteCode = customInviteCode 
       ? customInviteCode.toUpperCase().trim() 
       : this.generateInviteCode();
-    const initialState = createInitialState();
+    const initialState = createImperialInitialState();
     const boardJson = this.boardToJson(initialState.board);
 
     const game = await prisma.game.create({
@@ -131,7 +218,7 @@ export class GameService {
       where: { id: gameId },
       data: {
         blackPlayerId,
-        phase: 'setup',
+        phase: 'mode_select',
       },
       include: {
         whitePlayer: { select: { id: true, username: true } },
@@ -168,12 +255,8 @@ export class GameService {
         return { success: false, error: 'Not a participant' };
       }
 
-      if (game.phase !== 'setup' && game.phase !== 'waiting') {
+      if (game.phase !== 'setup') {
         return { success: false, error: 'Game not in setup phase' };
-      }
-      
-      if (game.phase === 'waiting' && playerColor !== 'white') {
-        return { success: false, error: 'Waiting for second player to join' };
       }
 
       const gameState = this.dbToGameState(game);
@@ -208,8 +291,6 @@ export class GameService {
 
       if (newState.whiteGeneralPosition && newState.blackGeneralPosition) {
         updateData.phase = 'coinflip';
-      } else if (game.phase === 'waiting') {
-        updateData.phase = 'setup';
       }
 
       const updatedGame = await tx.game.update({
@@ -225,6 +306,96 @@ export class GameService {
         success: true,
         game: updatedGame,
         gameState: newState,
+      };
+    });
+  }
+
+  async selectGameMode(
+    prisma: PrismaClient,
+    gameId: string,
+    playerId: string,
+    gameMode: 'imperial' | 'traditional'
+  ) {
+    return await prisma.$transaction(async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+      });
+
+      if (!game) {
+        return { success: false, error: 'Game not found' };
+      }
+
+      if (game.whitePlayerId !== playerId) {
+        return { success: false, error: 'Apenas o anfitrião pode escolher o modo' };
+      }
+
+      if (game.phase !== 'mode_select') {
+        return {
+          success: false,
+          error: `Não é possível escolher o modo agora (fase: ${game.phase})`,
+        };
+      }
+
+      if (!game.blackPlayerId) {
+        return { success: false, error: 'Aguardando o segundo jogador' };
+      }
+
+      const baseData = {
+        whiteGeneralPos: Prisma.JsonNull,
+        blackGeneralPos: Prisma.JsonNull,
+        whiteKingSwapped: false,
+        blackKingSwapped: false,
+        version: game.version + 1,
+      };
+
+      if (gameMode === 'imperial') {
+        const initial = createImperialInitialState();
+        const boardJson = this.boardToJson(initial.board);
+        const updatedGame = await tx.game.update({
+          where: { id: gameId },
+          data: {
+            ...baseData,
+            gameMode: 'imperial',
+            board: boardJson as any,
+            phase: 'setup',
+            currentTurn: 'white',
+            moveNumber: 0,
+            turnStartedAt: null,
+          },
+          include: {
+            whitePlayer: { select: { id: true, username: true } },
+            blackPlayer: { select: { id: true, username: true } },
+          },
+        });
+        return {
+          success: true as const,
+          game: updatedGame,
+          gameState: this.dbToGameState(updatedGame),
+        };
+      }
+
+      const initial = createTraditionalInitialState();
+      const boardJson = this.boardToJson(initial.board);
+      const updatedGame = await tx.game.update({
+        where: { id: gameId },
+        data: {
+          ...baseData,
+          gameMode: 'traditional',
+          board: boardJson as any,
+          phase: 'playing',
+          currentTurn: initial.currentTurn,
+          moveNumber: initial.moveNumber,
+          turnStartedAt: new Date(),
+        },
+        include: {
+          whitePlayer: { select: { id: true, username: true } },
+          blackPlayer: { select: { id: true, username: true } },
+        },
+      });
+      return {
+        success: true as const,
+        game: updatedGame,
+        gameState: this.dbToGameState(updatedGame),
       };
     });
   }
@@ -330,6 +501,7 @@ export class GameService {
         data: {
           phase: 'playing',
           version: game.version + 1,
+          turnStartedAt: new Date(),
         },
         include: {
           whitePlayer: { select: { id: true, username: true } },
@@ -354,13 +526,22 @@ export class GameService {
     }
   ) {
     return await prisma.$transaction(async (tx) => {
-      const game = await tx.game.findUnique({
+      let game = await tx.game.findUnique({
         where: { id: gameId },
       });
 
       if (!game) {
         return { success: false, error: 'Game not found' };
       }
+
+      const timeoutFinished = await this.finalizeTimeoutInTx(tx, game);
+      if (timeoutFinished) {
+        return timeoutFinished;
+      }
+
+      game = (await tx.game.findUnique({
+        where: { id: gameId },
+      }))!;
 
       const playerColor =
         game.whitePlayerId === playerId
@@ -418,6 +599,18 @@ export class GameService {
         return { success: false, error: 'Not your turn' };
       }
 
+      const elapsedMs = this.calcThinkingElapsedMs(game);
+      const bank =
+        playerColor === 'white' ? game.whiteTimeMs : game.blackTimeMs;
+      const afterThink = bank - elapsedMs;
+      if (afterThink <= 0) {
+        const lateTimeout = await this.finalizeTimeoutInTx(tx, game);
+        if (lateTimeout) {
+          return lateTimeout;
+        }
+        return { success: false, error: 'Tempo esgotado' };
+      }
+
       let action: GameAction;
       if (moveData.isSwap) {
         action = {
@@ -470,6 +663,12 @@ export class GameService {
         whiteKingSwapped: newState.whiteKingSwapped,
         blackKingSwapped: newState.blackKingSwapped,
         version: game.version + 1,
+        whiteTimeMs:
+          playerColor === 'white' ? afterThink : game.whiteTimeMs,
+        blackTimeMs:
+          playerColor === 'black' ? afterThink : game.blackTimeMs,
+        turnStartedAt:
+          newState.status === 'finished' ? null : new Date(),
       };
 
       if (newState.status === 'finished') {
@@ -506,6 +705,25 @@ export class GameService {
         gameState: newState,
         move,
       };
+    });
+  }
+
+  /**
+   * Loads a game row (with players + moves) and finalizes by timeout if the side to move is out of time.
+   */
+  async loadGameSyncingTimeout(prisma: PrismaClient, gameId: string) {
+    return prisma.$transaction(async (tx) => {
+      const slim = await tx.game.findUnique({ where: { id: gameId } });
+      if (!slim) return null;
+      await this.finalizeTimeoutInTx(tx, slim);
+      return tx.game.findUnique({
+        where: { id: gameId },
+        include: {
+          whitePlayer: { select: { id: true, username: true } },
+          blackPlayer: { select: { id: true, username: true } },
+          moves: { orderBy: { moveNumber: 'asc' } },
+        },
+      });
     });
   }
 
