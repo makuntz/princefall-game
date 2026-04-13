@@ -423,7 +423,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
           </div>
         </div>
 
-        <div className="game-layout" style={{ opacity: 0.5, pointerEvents: 'none' }}>
+        <div className="game-layout game-layout-stacked" style={{ opacity: 0.5, pointerEvents: 'none' }}>
           <div className="board-wrapper">
             <div className="board-container">
               {columns.map((col, idx) => (
@@ -482,14 +482,14 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
     (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
 
   return (
-    <div className="game-container">
+    <div className="game-container game-container-dark">
       <button className="back-btn" onClick={onBack}>← Voltar</button>
 
       <h1 className="game-play-title">
         {gameState.gameMode === 'imperial' ? 'XADREZ IMPERIAL' : 'XADREZ TRADICIONAL'}
       </h1>
 
-      <div className="game-layout">
+      <div className="game-layout game-layout-stacked">
         <div className="board-wrapper">
           <div className="board-container">
             {columns.map((col, idx) => (
@@ -543,7 +543,7 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
           </div>
         </div>
 
-        <div className="info-panel">
+        <div className="info-panel info-panel-local">
           <div className={`status ${gameState.status === 'finished' ? 'game-over' : gameState.currentTurn === 'white' ? 'turn-white' : 'turn-black'}`}>
             {gameState.status === 'finished'
               ? gameState.finishedReason === 'timeout_draw'

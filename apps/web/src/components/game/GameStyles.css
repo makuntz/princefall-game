@@ -623,18 +623,19 @@
   margin: 0 auto;
 }
 
-/* Local: tabuleiro em cima; temporizador, mensagens e botões sempre abaixo (ignora row em telas largas) */
-.game-layout.game-layout-local {
+/* Tabuleiro em cima, painel abaixo (local + online; ignora row em telas largas) */
+.game-layout.game-layout-stacked {
   flex-direction: column;
   align-items: stretch;
   width: 100%;
 }
 
-.game-layout.game-layout-local .board-wrapper {
+.game-layout.game-layout-stacked .board-wrapper {
   align-self: center;
 }
 
-.game-layout.game-layout-local .info-panel-local {
+.game-layout.game-layout-stacked .info-panel,
+.game-layout.game-layout-stacked .info-panel-local {
   width: 100%;
   max-width: min(100%, 720px);
   margin-left: auto;
@@ -898,8 +899,12 @@
 
 .game-container-dark .info-panel-local .message {
   font-size: 14px;
-  padding: 12px;
+  line-height: 1.5;
+  padding: 14px 14px 16px;
   margin: 12px 0;
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
   background: rgba(212, 175, 55, 0.05);
   border-radius: 8px;
   border-left: 3px solid #d4af37;
@@ -961,6 +966,21 @@
 .game-container-dark .panel-reset:hover {
   background: linear-gradient(135deg, #a00000, #700000);
   box-shadow: 0 6px 25px rgba(139, 0, 0, 0.5);
+}
+
+.game-container-dark .info-panel-local > .reset-btn {
+  margin-top: 12px;
+  width: 100%;
+  background: linear-gradient(135deg, #8b0000, #600000);
+  border: 1px solid #d4af37;
+  color: var(--imp-gold);
+  font-family: var(--imp-font-ui);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.game-container-dark .info-panel-local > .reset-btn:hover {
+  background: linear-gradient(135deg, #a00000, #700000);
 }
 
 .game-container-dark .timer-label {
