@@ -35,8 +35,8 @@ model Game {
   blackGeneralPos Json?
   whiteKingSwapped Boolean @default(false)
   blackKingSwapped Boolean @default(false)
-  whiteTimeMs   Int       @default(300000)
-  blackTimeMs   Int       @default(300000)
+  whiteTimeMs   Int       @default(600000)
+  blackTimeMs   Int       @default(600000)
   turnStartedAt DateTime?
   winnerId      String?
   finishedReason String?

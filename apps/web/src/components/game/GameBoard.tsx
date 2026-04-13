@@ -14,6 +14,8 @@ import { getPieceEmoji, pieceBoardClassName } from './pieceEmoji';
 import { pieceLabelPt } from './pieceLabels';
 import './GameStyles.css';
 
+const MATCH_CLOCK_MS = 10 * 60 * 1000;
+
 function formatClock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const m = Math.floor(s / 60);
@@ -31,8 +33,8 @@ function onlineClockSeconds(
   gameState: GameState,
   nowMs: number
 ): { white: number; black: number; active: 'white' | 'black' | null } {
-  const wBank = (gameInfo.whiteTimeMs ?? 300000) / 1000;
-  const bBank = (gameInfo.blackTimeMs ?? 300000) / 1000;
+  const wBank = (gameInfo.whiteTimeMs ?? MATCH_CLOCK_MS) / 1000;
+  const bBank = (gameInfo.blackTimeMs ?? MATCH_CLOCK_MS) / 1000;
   if (gameState.status === 'finished') {
     return { white: wBank, black: bBank, active: null };
   }

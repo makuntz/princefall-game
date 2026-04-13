@@ -4,6 +4,7 @@ import { GameService } from '../services/GameService';
 import { serializeState } from '@princefall/game-core';
 
 const gameService = new GameService();
+const MATCH_CLOCK_MS = 10 * 60 * 1000;
 
 const createGameSchema = z.object({
   inviteCode: z.string().optional(),
@@ -182,8 +183,8 @@ export async function gameRoutes(fastify: FastifyInstance) {
         whiteGeneralPos: game.whiteGeneralPos,
         blackGeneralPos: game.blackGeneralPos,
         gameMode: game.gameMode ?? 'imperial',
-        whiteTimeMs: game.whiteTimeMs ?? 300000,
-        blackTimeMs: game.blackTimeMs ?? 300000,
+        whiteTimeMs: game.whiteTimeMs ?? MATCH_CLOCK_MS,
+        blackTimeMs: game.blackTimeMs ?? MATCH_CLOCK_MS,
         turnStartedAt: turnStartedAtIso(game),
         winnerId: game.winnerId,
         finishedReason: game.finishedReason ?? null,
@@ -226,8 +227,8 @@ export async function gameRoutes(fastify: FastifyInstance) {
         whiteGeneralPos: game.whiteGeneralPos,
         blackGeneralPos: game.blackGeneralPos,
         gameMode: game.gameMode ?? 'imperial',
-        whiteTimeMs: game.whiteTimeMs ?? 300000,
-        blackTimeMs: game.blackTimeMs ?? 300000,
+        whiteTimeMs: game.whiteTimeMs ?? MATCH_CLOCK_MS,
+        blackTimeMs: game.blackTimeMs ?? MATCH_CLOCK_MS,
         turnStartedAt: turnStartedAtIso(game),
         playerColor,
       },
@@ -363,8 +364,8 @@ export async function gameRoutes(fastify: FastifyInstance) {
         whiteGeneralPos: result.game.whiteGeneralPos,
         blackGeneralPos: result.game.blackGeneralPos,
         gameMode: result.game.gameMode ?? 'imperial',
-        whiteTimeMs: result.game.whiteTimeMs ?? 300000,
-        blackTimeMs: result.game.blackTimeMs ?? 300000,
+        whiteTimeMs: result.game.whiteTimeMs ?? MATCH_CLOCK_MS,
+        blackTimeMs: result.game.blackTimeMs ?? MATCH_CLOCK_MS,
         turnStartedAt: turnStartedAtIso(result.game),
         finishedReason: result.game.finishedReason ?? null,
         playerColor,
