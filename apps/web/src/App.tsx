@@ -16,6 +16,8 @@ function App() {
   >('login');
   const [creatingOnline, setCreatingOnline] = useState(false);
   const [sessionBanner, setSessionBanner] = useState<string | null>(null);
+  /** Incrementado após confirmar e-mail pela URL — força GameList a atualizar /auth/me */
+  const [emailVerifyNonce, setEmailVerifyNonce] = useState(0);
 
   useEffect(() => {
     const onExpired = () => {
@@ -47,6 +49,7 @@ function App() {
         );
         if (!cancelled) {
           setSessionBanner('E-mail confirmado com sucesso.');
+          setEmailVerifyNonce((n) => n + 1);
         }
       } catch (e) {
         if (!cancelled) {
@@ -176,6 +179,7 @@ function App() {
     return (
       <GameList
         token={token!}
+        emailVerifyNonce={emailVerifyNonce}
         onCreateGame={handleStartCreateOnline}
         onJoinGame={handleJoinGame}
         onJoinGameByCode={handleJoinGameByCode}

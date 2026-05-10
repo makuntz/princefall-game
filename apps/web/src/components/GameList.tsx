@@ -16,6 +16,8 @@ interface SessionUser {
 
 interface GameListProps {
   token: string;
+  /** Quando > 0 e muda, atualiza /auth/me para esconder o aviso de “reenviar link” após verificar e-mail */
+  emailVerifyNonce?: number;
   onCreateGame: () => void;
   onJoinGame: (gameId: string, inviteCode: string) => void;
   onSelectGame: (gameId: string) => void;
@@ -30,6 +32,7 @@ interface GameListProps {
 
 export function GameList({
   token,
+  emailVerifyNonce = 0,
   onCreateGame,
   onJoinGame,
   onSelectGame,
@@ -60,6 +63,12 @@ export function GameList({
   useEffect(() => {
     refreshSessionUser();
   }, [token]);
+
+  useEffect(() => {
+    if (emailVerifyNonce > 0) {
+      refreshSessionUser();
+    }
+  }, [emailVerifyNonce, token]);
 
   useEffect(() => {
     loadGames();
