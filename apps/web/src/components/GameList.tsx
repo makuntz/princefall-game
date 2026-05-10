@@ -10,6 +10,10 @@ interface Game {
   inviteCode: string;
 }
 
+interface SessionUser {
+  emailVerifiedAt?: string | null;
+}
+
 interface GameListProps {
   token: string;
   onCreateGame: () => void;
@@ -17,15 +21,45 @@ interface GameListProps {
   onSelectGame: (gameId: string) => void;
   onJoinGameByCode?: (gameId: string) => void;
   onOpenLeaderboard?: () => void;
+  onOpenProfile?: () => void;
+  onLogout?: () => void;
+  /** Aviso vindo do App (ex.: link de confirmação em dev sem SMTP) */
+  sessionNotice?: string | null;
+  onDismissSessionNotice?: () => void;
 }
 
-export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoinGameByCode, /*onOpenLeaderboard*/ }: GameListProps) {
+export function GameList({
+  token,
+  onCreateGame,
+  onJoinGame,
+  onSelectGame,
+  onJoinGameByCode,
+  onOpenProfile,
+  onLogout,
+  sessionNotice,
+  onDismissSessionNotice,
+  /*onOpenLeaderboard*/
+}: GameListProps) {
   const [games, setGames] = useState<Game[]>([]);
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  const refreshSessionUser = async () => {
+    try {
+      const res = await api.get('/auth/me', { token });
+      setSessionUser(res.user ?? null);
+    } catch {
+      setSessionUser(null);
+    }
+  };
+
+  useEffect(() => {
+    refreshSessionUser();
+  }, [token]);
 
   useEffect(() => {
     loadGames();
@@ -93,9 +127,76 @@ export function GameList({ token, onCreateGame, onJoinGame, onSelectGame, onJoin
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      const res = await api.post('/auth/resend-verification', {}, { token });
+      await refreshSessionUser();
+      let msg = (res as { message?: string }).message || 'Enviamos um novo link para seu e-mail.';
+      if (import.meta.env.DEV && (res as { devVerificationUrl?: string }).devVerificationUrl) {
+        console.info('[dev] Link de verificação:', (res as { devVerificationUrl?: string }).devVerificationUrl);
+        msg += ' (veja também o console em modo dev.)';
+      }
+      alert(msg);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao reenviar.');
+    }
+  };
+
+  const needsEmailVerify = sessionUser != null && !sessionUser.emailVerifiedAt;
+
   return (
     <div className="game-list-page">
-      <h1 className="game-list-title">Minhas Partidas</h1>
+      <header className="game-list-header">
+        <h1 className="game-list-title">Minhas Partidas</h1>
+        {(onOpenProfile || onLogout) && (
+          <div className="game-list-header-actions">
+            {onOpenProfile && (
+              <button
+                type="button"
+                className="game-list-btn game-list-btn--outline game-list-profile-btn"
+                onClick={onOpenProfile}
+              >
+                Meu perfil
+              </button>
+            )}
+            {onLogout && (
+              <button type="button" className="game-list-btn game-list-btn--outline" onClick={onLogout}>
+                Sair
+              </button>
+            )}
+          </div>
+        )}
+      </header>
+
+      {sessionNotice && (
+        <div className="game-list-notice" role="status">
+          <p className="game-list-notice-text">{sessionNotice}</p>
+          {onDismissSessionNotice && (
+            <button type="button" className="game-list-notice-dismiss" onClick={onDismissSessionNotice}>
+              Fechar
+            </button>
+          )}
+        </div>
+      )}
+
+      {needsEmailVerify && (
+        <div className="game-list-banner" role="status">
+          <div className="game-list-banner-main">
+            <strong>E-mail não confirmado.</strong>
+            <span>
+              Abra o link enviado para sua caixa de entrada (e spam). Sem SMTP configurado no servidor, o link
+              aparece no terminal do backend em desenvolvimento.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="game-list-btn game-list-btn--outline game-list-btn--compact"
+            onClick={handleResendVerification}
+          >
+            Reenviar link
+          </button>
+        </div>
+      )}
 
       {error && <div className="game-list-error">{error}</div>}
 

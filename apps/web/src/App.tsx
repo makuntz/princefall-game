@@ -1,19 +1,64 @@
 import { useState, useEffect } from 'react';
 import { GameBoard } from './components/game/GameBoard';
-import { Login } from './components/Login';
+import { Login, type RegisterPayload } from './components/Login';
 import { GameList } from './components/GameList';
 import { LocalGame } from './components/LocalGame';
 import { Leaderboard } from './components/Leaderboard';
 import { ModeSelectionScreen, type LocalPlayChoice } from './components/game/ModeSelectionScreen';
+import { EditProfile } from './components/EditProfile';
 import { api } from './api';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
   const [view, setView] = useState<
-    'login' | 'list' | 'game' | 'local' | 'leaderboard' | 'pickOnlineMode'
+    'login' | 'list' | 'game' | 'local' | 'leaderboard' | 'pickOnlineMode' | 'profile'
   >('login');
   const [creatingOnline, setCreatingOnline] = useState(false);
+  const [sessionBanner, setSessionBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onExpired = () => {
+      localStorage.removeItem('token');
+      setToken(null);
+      setCurrentGameId(null);
+      setView('login');
+      setSessionBanner('Sessão expirada ou inválida. Entre novamente.');
+    };
+    window.addEventListener('auth:session-expired', onExpired);
+    return () => window.removeEventListener('auth:session-expired', onExpired);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verifyToken = params.get('verifyEmail');
+    if (!verifyToken) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await api.post('/auth/verify-email', { token: verifyToken }, { skipSessionRedirect: true });
+        params.delete('verifyEmail');
+        const q = params.toString();
+        window.history.replaceState(
+          {},
+          '',
+          `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash}`,
+        );
+        if (!cancelled) {
+          setSessionBanner('E-mail confirmado com sucesso.');
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setSessionBanner(e instanceof Error ? e.message : 'Não foi possível confirmar o e-mail.');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -36,17 +81,29 @@ function App() {
     return () => window.removeEventListener('startLocalGame', handleLocalGame);
   }, [token]);
 
-  const handleLogin = (email: string) => {
-    api.post('/auth/login', { email })
-      .then((res) => {
-        setToken(res.token);
-        localStorage.setItem('token', res.token);
-        setView('list');
-      })
-      .catch((err) => {
-        console.error('Login error:', err);
-        alert('Erro ao fazer login');
-      });
+  const handleLogin = async (email: string) => {
+    const res = await api.post('/auth/login', { email });
+    setToken(res.token);
+    localStorage.setItem('token', res.token);
+    setView('list');
+  };
+
+  const handleRegister = async (data: RegisterPayload) => {
+    const res = (await api.post('/auth/register', data)) as {
+      token: string;
+      devVerificationUrl?: string;
+    };
+    setToken(res.token);
+    localStorage.setItem('token', res.token);
+    if (res.devVerificationUrl) {
+      setSessionBanner(
+        'Sem envio de e-mail (SMTP não configurado no servidor). Confirme sua conta abrindo: ' +
+          res.devVerificationUrl,
+      );
+    } else {
+      setSessionBanner(null);
+    }
+    setView('list');
   };
 
   const handleStartCreateOnline = () => {
@@ -96,8 +153,23 @@ function App() {
     setView('leaderboard');
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setCurrentGameId(null);
+    setSessionBanner(null);
+    setView('login');
+  };
+
   if (view === 'login') {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <Login
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        sessionBanner={sessionBanner}
+        onDismissSessionBanner={() => setSessionBanner(null)}
+      />
+    );
   }
 
   if (view === 'list') {
@@ -108,6 +180,10 @@ function App() {
         onJoinGame={handleJoinGame}
         onJoinGameByCode={handleJoinGameByCode}
         onOpenLeaderboard={handleOpenLeaderboard}
+        onOpenProfile={() => setView('profile')}
+        onLogout={handleLogout}
+        sessionNotice={sessionBanner}
+        onDismissSessionNotice={() => setSessionBanner(null)}
         onSelectGame={(gameId) => {
           setCurrentGameId(gameId);
           setView('game');
@@ -144,6 +220,10 @@ function App() {
         )}
       </>
     );
+  }
+
+  if (view === 'profile') {
+    return <EditProfile token={token!} onBack={() => setView('list')} />;
   }
 
   if (view === 'leaderboard') {

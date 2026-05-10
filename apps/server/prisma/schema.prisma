@@ -91,15 +91,23 @@ model Rating {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  email          String   @unique
+  username       String   @unique
+  country        String?
+  stateProvince  String?
+  city           String?
+  privacyAcceptedAt     DateTime?
+  emailVerifiedAt       DateTime?
+  emailVerificationToken String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   authIdentities AuthIdentity[]
   whiteGames Game[] @relation("WhitePlayer")
   blackGames Game[] @relation("BlackPlayer")
   moves GameMove[]
   rating Rating?
+
+  @@index([country, stateProvince])
 }
