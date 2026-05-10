@@ -1,6 +1,6 @@
-# PrinceFall Game
+# Queda da coroa
 
-Jogo de xadrez customizado 9x9 com suporte a multiplayer assíncrono, IA e real-time.
+Jogo de xadrez customizado 9×9 com suporte a multiplayer assíncrono, IA e real-time. *(Repositório e pacotes npm continuam como `princefall-game` / `@princefall/*`.)*
 
 ## Arquitetura
 
