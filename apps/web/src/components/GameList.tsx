@@ -23,7 +23,7 @@ interface GameListProps {
   onOpenLeaderboard?: () => void;
   onOpenProfile?: () => void;
   onLogout?: () => void;
-  /** Aviso vindo do App (ex.: link de confirmação em dev sem SMTP) */
+  /** Aviso vindo do App (ex.: link de confirmação em dev sem BREVO_API_KEY) */
   sessionNotice?: string | null;
   onDismissSessionNotice?: () => void;
 }
@@ -184,7 +184,7 @@ export function GameList({
           <div className="game-list-banner-main">
             <strong>E-mail não confirmado.</strong>
             <span>
-              Abra o link enviado para sua caixa de entrada (e spam). Sem SMTP configurado no servidor, o link
+              Abra o link enviado para sua caixa de entrada (e spam). Sem BREVO_API_KEY no servidor, o link também
               aparece no terminal do backend em desenvolvimento.
             </span>
           </div>

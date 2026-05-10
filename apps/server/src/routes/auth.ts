@@ -185,7 +185,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       user: userPublic(user),
     };
 
-    if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
+    if (process.env.NODE_ENV !== 'production' && !process.env.BREVO_API_KEY) {
       payload.devVerificationUrl = verifyUrl;
     }
 
@@ -278,7 +278,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     const out: Record<string, unknown> = { ok: true, message: 'Novo link enviado para seu e-mail.' };
-    if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
+    if (process.env.NODE_ENV !== 'production' && !process.env.BREVO_API_KEY) {
       out.devVerificationUrl = verifyUrl;
     }
     return out;
