@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Game" ADD COLUMN "whiteImperialCapturePoints" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "Game" ADD COLUMN "blackImperialCapturePoints" DOUBLE PRECISION NOT NULL DEFAULT 0;

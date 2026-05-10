@@ -35,6 +35,8 @@ model Game {
   blackGeneralPos Json?
   whiteKingSwapped Boolean @default(false)
   blackKingSwapped Boolean @default(false)
+  whiteImperialCapturePoints Float @default(0)
+  blackImperialCapturePoints Float @default(0)
   whiteTimeMs   Int       @default(600000)
   blackTimeMs   Int       @default(600000)
   turnStartedAt DateTime?

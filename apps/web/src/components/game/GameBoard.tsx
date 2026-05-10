@@ -5,7 +5,8 @@ import {
   Position,
   deserializeState,
   getLegalMoves,
-  imperialMaterialScoreForColor,
+  imperialCapturePointsForColor,
+  imperialTournamentTotals,
   positionToString,
 } from '@princefall/game-core';
 import { SetupScreen } from './SetupScreen';
@@ -420,6 +421,17 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
                        null;
     const finishedReason = gameInfo.finishedReason || 'prince_capture';
 
+    const imperialTotals =
+      gameState?.gameMode === 'imperial'
+        ? imperialTournamentTotals(
+            gameState.gameMode,
+            gameState.finishedReason ?? (finishedReason as GameState['finishedReason']),
+            gameState.winner ?? null,
+            imperialCapturePointsForColor(gameState, 'white'),
+            imperialCapturePointsForColor(gameState, 'black')
+          )
+        : null;
+
     return (
       <div className="game-container game-container-dark">
         <button type="button" className="back-btn" onClick={onBack}>← Voltar</button>
@@ -449,6 +461,13 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
             ) : (
               <div className="online-finished-muted">
                 {finishedReason === 'timeout_draw' ? 'Empate por pontuação' : 'Partida finalizada'}
+              </div>
+            )}
+
+            {imperialTotals && (
+              <div className="online-finished-muted" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+                Pontuação imperial: Brancas {imperialTotals.white.toFixed(1)} — Pretas{' '}
+                {imperialTotals.black.toFixed(1)}
               </div>
             )}
 
@@ -546,8 +565,8 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
     (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
 
   const imperial = gameState.gameMode === 'imperial';
-  const whiteScore = imperial ? imperialMaterialScoreForColor(gameState, 'white') : null;
-  const blackScore = imperial ? imperialMaterialScoreForColor(gameState, 'black') : null;
+  const whiteCaptures = imperial ? imperialCapturePointsForColor(gameState, 'white') : null;
+  const blackCaptures = imperial ? imperialCapturePointsForColor(gameState, 'black') : null;
   const whiteWarn = clockDisplay.white <= 180 && clockDisplay.white > 60;
   const whiteDanger = clockDisplay.white <= 60;
   const blackWarn = clockDisplay.black <= 180 && clockDisplay.black > 60;
@@ -638,9 +657,9 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
             >
               <div className="timer-label">Brancas</div>
               <div className="timer-display">{formatClock(clockDisplay.white)}</div>
-              {imperial && whiteScore !== null && (
+              {imperial && whiteCaptures !== null && (
                 <div className="score-display">
-                  Pontos: <span className="score-value">{whiteScore.toFixed(1)}</span>
+                  Capturas: <span className="score-value">{whiteCaptures.toFixed(1)}</span>
                 </div>
               )}
             </div>
@@ -649,9 +668,9 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
             >
               <div className="timer-label">Pretas</div>
               <div className="timer-display">{formatClock(clockDisplay.black)}</div>
-              {imperial && blackScore !== null && (
+              {imperial && blackCaptures !== null && (
                 <div className="score-display">
-                  Pontos: <span className="score-value">{blackScore.toFixed(1)}</span>
+                  Capturas: <span className="score-value">{blackCaptures.toFixed(1)}</span>
                 </div>
               )}
             </div>
@@ -708,7 +727,13 @@ export function GameBoard({ gameId, token, onBack, playerColor, onOpenLeaderboar
             <br />
             <strong>Troca especial:</strong> o rei pode trocar de lugar com a princesa uma vez por jogo.
             <br />
-            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, vitória por pontuação no tabuleiro (empate se igual).
+            <strong>Capturas:</strong> peão 1, general/princesa 2,5, cavalo 3, torre/bispo 5, rei 7, rainha 9; começa em 0 e soma só capturas.
+            <br />
+            <strong>Pontuação imperial:</strong> vitória decisiva (captura da princesa) = 60 ao vencedor; vitória no tempo = suas capturas + 10; derrotado fica com os pontos das próprias capturas.
+            <br />
+            <strong>Ranking:</strong> vitória 1, empate 0,5, derrota 0 (Elo).
+            <br />
+            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, desempate por material no tabuleiro (empate se igual).
           </div>
         </div>
       </div>

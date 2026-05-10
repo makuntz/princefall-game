@@ -1,7 +1,7 @@
 import { GameState, GameAction, Position, Piece, Color } from '../types';
 import { getPieceAt, setPieceAt, getLegalMoves } from '../pieces';
 import { positionToString } from '../utils/position';
-import { resolveImperialTimeout } from '../scoring';
+import { imperialCaptureValueForPiece, resolveImperialTimeout } from '../scoring';
 
 export function createImperialInitialState(): GameState {
   const board = new Map<string, Piece>();
@@ -43,6 +43,8 @@ export function createImperialInitialState(): GameState {
     blackKingSwapped: false,
     status: 'setup',
     coinflipResolved: false,
+    whiteImperialCapturePoints: 0,
+    blackImperialCapturePoints: 0,
   };
 }
 
@@ -243,6 +245,14 @@ function applyMove(state: GameState, action: GameAction): GameState {
   const newBoard = new Map(state.board);
   const capturedPiece = getPieceAt(newBoard, move.to);
 
+  let whiteImperialCapturePoints = state.whiteImperialCapturePoints ?? 0;
+  let blackImperialCapturePoints = state.blackImperialCapturePoints ?? 0;
+  if (state.gameMode === 'imperial' && capturedPiece) {
+    const add = imperialCaptureValueForPiece(capturedPiece);
+    if (playerColor === 'white') whiteImperialCapturePoints += add;
+    else blackImperialCapturePoints += add;
+  }
+
   setPieceAt(newBoard, move.from, null);
   const movedPiece: Piece = {
     ...piece,
@@ -267,7 +277,7 @@ function applyMove(state: GameState, action: GameAction): GameState {
     finishedReason = 'king_capture';
   }
 
-  return {
+  const moveResult: GameState = {
     ...state,
     board: newBoard,
     currentTurn: playerColor === 'white' ? 'black' : 'white',
@@ -283,6 +293,13 @@ function applyMove(state: GameState, action: GameAction): GameState {
     endedAt,
     finishedReason,
   };
+
+  if (state.gameMode === 'imperial') {
+    moveResult.whiteImperialCapturePoints = whiteImperialCapturePoints;
+    moveResult.blackImperialCapturePoints = blackImperialCapturePoints;
+  }
+
+  return moveResult;
 }
 
 function applySwapKingPrince(state: GameState, action: GameAction): GameState {

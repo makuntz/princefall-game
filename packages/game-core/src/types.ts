@@ -65,6 +65,9 @@ export interface GameState {
   /** After coin flip: who moves first once play begins. */
   coinflipResolved?: boolean;
   finishedReason?: FinishedReason;
+  /** Imperial only: sum of piece values captured from the opponent (starts at 0). */
+  whiteImperialCapturePoints?: number;
+  blackImperialCapturePoints?: number;
 }
 
 export interface MoveIntent {
@@ -120,4 +123,6 @@ export interface SerializedGameState {
   lastMove?: Move;
   coinflipResolved?: boolean;
   finishedReason?: FinishedReason;
+  whiteImperialCapturePoints?: number;
+  blackImperialCapturePoints?: number;
 }
