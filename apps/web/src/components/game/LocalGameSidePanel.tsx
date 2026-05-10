@@ -1,4 +1,8 @@
-import { GameState, imperialMaterialScoreForColor } from '@princefall/game-core';
+import {
+  GameState,
+  imperialCapturePointsForColor,
+  imperialTournamentTotals,
+} from '@princefall/game-core';
 import './GameStyles.css';
 
 function formatClock(totalSeconds: number): string {
@@ -54,8 +58,18 @@ export function LocalGameSidePanel({
   swapControls,
 }: LocalGameSidePanelProps) {
   const imperial = gameState.gameMode === 'imperial';
-  const whiteScore = imperial ? imperialMaterialScoreForColor(gameState, 'white') : null;
-  const blackScore = imperial ? imperialMaterialScoreForColor(gameState, 'black') : null;
+  const whiteCaptures = imperial ? imperialCapturePointsForColor(gameState, 'white') : null;
+  const blackCaptures = imperial ? imperialCapturePointsForColor(gameState, 'black') : null;
+  const imperialTotals =
+    imperial && gameState.status === 'finished'
+      ? imperialTournamentTotals(
+          gameState.gameMode,
+          gameState.finishedReason,
+          gameState.winner ?? null,
+          imperialCapturePointsForColor(gameState, 'white'),
+          imperialCapturePointsForColor(gameState, 'black')
+        )
+      : null;
 
   const whiteWarn = whiteSeconds <= 180 && whiteSeconds > 60;
   const whiteDanger = whiteSeconds <= 60;
@@ -70,9 +84,9 @@ export function LocalGameSidePanel({
         >
           <div className="timer-label">Brancas</div>
           <div className="timer-display">{formatClock(whiteSeconds)}</div>
-          {imperial && whiteScore !== null && (
+          {imperial && whiteCaptures !== null && (
             <div className="score-display">
-              Pontos: <span className="score-value">{whiteScore.toFixed(1)}</span>
+              Capturas: <span className="score-value">{whiteCaptures.toFixed(1)}</span>
             </div>
           )}
         </div>
@@ -81,9 +95,9 @@ export function LocalGameSidePanel({
         >
           <div className="timer-label">Pretas</div>
           <div className="timer-display">{formatClock(blackSeconds)}</div>
-          {imperial && blackScore !== null && (
+          {imperial && blackCaptures !== null && (
             <div className="score-display">
-              Pontos: <span className="score-value">{blackScore.toFixed(1)}</span>
+              Capturas: <span className="score-value">{blackCaptures.toFixed(1)}</span>
             </div>
           )}
         </div>
@@ -94,6 +108,13 @@ export function LocalGameSidePanel({
       >
         {statusHeading(gameState)}
       </div>
+
+      {imperialTotals && (
+        <div className="message" style={{ marginTop: '0.35rem' }}>
+          Pontuação imperial: Brancas {imperialTotals.white.toFixed(1)} — Pretas{' '}
+          {imperialTotals.black.toFixed(1)}
+        </div>
+      )}
 
       <div className="message">{contextualMessage}</div>
 
@@ -113,6 +134,12 @@ export function LocalGameSidePanel({
           <>
             <strong>Objetivo:</strong> capturar a princesa inimiga.
             <br />
+            <strong>Capturas:</strong> peão 1, general/princesa 2,5, cavalo 3, torre/bispo 5, rei 7, rainha 9; começa em 0.
+            <br />
+            <strong>Pontuação imperial:</strong> vitória decisiva = 60 ao vencedor; vitória no tempo = suas capturas + 10; derrotado = próprias capturas.
+            <br />
+            <strong>Ranking:</strong> vitória 1, empate 0,5, derrota 0 (Elo).
+            <br />
             <strong>General:</strong> 1 ou 2 casas para a frente + 1 casa na diagonal à frente (não recua).
             <br />
             <strong>Rei guerreiro:</strong> 1 ou 2 casas na cruz (sem salto) + 1 casa nas diagonais.
@@ -121,7 +148,7 @@ export function LocalGameSidePanel({
             <br />
             <strong>Troca especial:</strong> o rei pode trocar de lugar com a princesa uma vez por jogo.
             <br />
-            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, vitória por pontuação no tabuleiro (empate se igual).
+            <strong>Tempo:</strong> 10 minutos por lado; ao zerar, desempate por material no tabuleiro (empate se igual).
           </>
         ) : (
           <>

@@ -13,7 +13,7 @@ export function serializeState(state: GameState): SerializedGameState {
     };
   });
 
-  return {
+  const base = {
     gameMode: state.gameMode,
     board,
     currentTurn: state.currentTurn,
@@ -29,6 +29,16 @@ export function serializeState(state: GameState): SerializedGameState {
     coinflipResolved: state.coinflipResolved,
     finishedReason: state.finishedReason,
   };
+
+  if (state.gameMode === 'imperial') {
+    return {
+      ...base,
+      whiteImperialCapturePoints: state.whiteImperialCapturePoints ?? 0,
+      blackImperialCapturePoints: state.blackImperialCapturePoints ?? 0,
+    };
+  }
+
+  return base;
 }
 
 export function deserializeState(serialized: SerializedGameState): GameState {
@@ -54,6 +64,11 @@ export function deserializeState(serialized: SerializedGameState): GameState {
       ? rawStatus
       : 'setup';
 
+  const captureWhite =
+    gameMode === 'imperial' ? serialized.whiteImperialCapturePoints ?? 0 : undefined;
+  const captureBlack =
+    gameMode === 'imperial' ? serialized.blackImperialCapturePoints ?? 0 : undefined;
+
   return {
     gameMode,
     board,
@@ -69,5 +84,11 @@ export function deserializeState(serialized: SerializedGameState): GameState {
     lastMove: serialized.lastMove,
     coinflipResolved: serialized.coinflipResolved,
     finishedReason: serialized.finishedReason,
+    ...(gameMode === 'imperial'
+      ? {
+          whiteImperialCapturePoints: captureWhite,
+          blackImperialCapturePoints: captureBlack,
+        }
+      : {}),
   };
 }

@@ -112,10 +112,14 @@ export class GameService {
       },
     });
 
-    if (newState.winner && game.blackPlayerId) {
-      const winnerPlayerId =
-        newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId;
-      await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId, winnerPlayerId);
+    if (game.blackPlayerId) {
+      if (newState.winner) {
+        const winnerPlayerId =
+          newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId;
+        await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId, winnerPlayerId);
+      } else if (newState.finishedReason === 'timeout_draw') {
+        await this.updateRatingsDraw(tx, game.whitePlayerId, game.blackPlayerId);
+      }
     }
 
     return {
@@ -157,6 +161,10 @@ export class GameService {
       endedAt: game.finishedAt ? new Date(game.finishedAt).getTime() : undefined,
       finishedReason: game.finishedReason || undefined,
       coinflipResolved,
+      whiteImperialCapturePoints:
+        game.whiteImperialCapturePoints != null ? Number(game.whiteImperialCapturePoints) : 0,
+      blackImperialCapturePoints:
+        game.blackImperialCapturePoints != null ? Number(game.blackImperialCapturePoints) : 0,
     };
   }
 
@@ -590,6 +598,8 @@ export class GameService {
           playerColor === 'black' ? afterThink : game.blackTimeMs,
         turnStartedAt:
           newState.status === 'finished' ? null : new Date(),
+        whiteImperialCapturePoints: newState.whiteImperialCapturePoints ?? 0,
+        blackImperialCapturePoints: newState.blackImperialCapturePoints ?? 0,
       };
 
       if (newState.status === 'finished') {
@@ -614,10 +624,14 @@ export class GameService {
         },
       });
 
-      if (newState.status === 'finished' && newState.winner && game.blackPlayerId) {
-        const winnerPlayerId =
-          newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId;
-        await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId, winnerPlayerId);
+      if (newState.status === 'finished' && game.blackPlayerId) {
+        if (newState.winner) {
+          const winnerPlayerId =
+            newState.winner === 'white' ? game.whitePlayerId : game.blackPlayerId;
+          await this.updateRatings(tx, game.whitePlayerId, game.blackPlayerId, winnerPlayerId);
+        } else if (newState.finishedReason === 'timeout_draw') {
+          await this.updateRatingsDraw(tx, game.whitePlayerId, game.blackPlayerId);
+        }
       }
 
       return {
@@ -654,6 +668,22 @@ export class GameService {
     blackPlayerId: string,
     winnerId: string
   ) {
+    const whiteScore = winnerId === whitePlayerId ? 1 : 0;
+    const blackScore = winnerId === blackPlayerId ? 1 : 0;
+    await this.updateRatingsFromScores(prisma, whitePlayerId, blackPlayerId, whiteScore, blackScore);
+  }
+
+  private async updateRatingsDraw(prisma: any, whitePlayerId: string, blackPlayerId: string) {
+    await this.updateRatingsFromScores(prisma, whitePlayerId, blackPlayerId, 0.5, 0.5);
+  }
+
+  private async updateRatingsFromScores(
+    prisma: any,
+    whitePlayerId: string,
+    blackPlayerId: string,
+    whiteScore: number,
+    blackScore: number
+  ) {
     const whiteRating = await prisma.rating.findUnique({
       where: { userId: whitePlayerId },
     });
@@ -669,9 +699,6 @@ export class GameService {
     const whiteExpected = 1 / (1 + Math.pow(10, (blackRating.rating - whiteRating.rating) / 400));
     const blackExpected = 1 / (1 + Math.pow(10, (whiteRating.rating - blackRating.rating) / 400));
 
-    const whiteScore = winnerId === whitePlayerId ? 1 : 0;
-    const blackScore = winnerId === blackPlayerId ? 1 : 0;
-
     const whiteNewRating = Math.round(whiteRating.rating + K * (whiteScore - whiteExpected));
     const blackNewRating = Math.round(blackRating.rating + K * (blackScore - blackExpected));
 
@@ -681,7 +708,8 @@ export class GameService {
         rating: whiteNewRating,
         gamesPlayed: whiteRating.gamesPlayed + 1,
         wins: whiteRating.wins + (whiteScore === 1 ? 1 : 0),
-        losses: whiteRating.losses + (whiteScore === 0 ? 1 : 0),
+        losses: whiteRating.losses + (whiteScore === 0 && blackScore === 1 ? 1 : 0),
+        draws: whiteRating.draws + (whiteScore === 0.5 ? 1 : 0),
       },
     });
 
@@ -691,7 +719,8 @@ export class GameService {
         rating: blackNewRating,
         gamesPlayed: blackRating.gamesPlayed + 1,
         wins: blackRating.wins + (blackScore === 1 ? 1 : 0),
-        losses: blackRating.losses + (blackScore === 0 ? 1 : 0),
+        losses: blackRating.losses + (blackScore === 0 && whiteScore === 1 ? 1 : 0),
+        draws: blackRating.draws + (blackScore === 0.5 ? 1 : 0),
       },
     });
   }
