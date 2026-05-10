@@ -97,7 +97,7 @@ function App() {
     localStorage.setItem('token', res.token);
     if (res.devVerificationUrl) {
       setSessionBanner(
-        'Sem envio de e-mail (SMTP não configurado no servidor). Confirme sua conta abrindo: ' +
+        'Sem envio de e-mail (BREVO_API_KEY não configurada no servidor). Confirme sua conta abrindo: ' +
           res.devVerificationUrl,
       );
     } else {
