@@ -6,6 +6,7 @@ import {
   isKnownCountryCode,
 } from '@princefall/shared';
 import { buildEmailVerificationUrl, sendVerificationEmail } from '../email';
+import { isGoogleAuthConfigured, registerGoogleAuthRoutes } from '../googleAuth';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -87,6 +88,21 @@ const verifyEmailSchema = z.object({
   token: z.string().min(16, 'Token inválido.'),
 });
 
+const googleRegisterSchema = z
+  .object({
+    pendingToken: z.string().min(16, 'Sessão Google inválida.'),
+    acceptedPrivacyPolicy: z.literal(true, {
+      errorMap: () => ({
+        message: 'É necessário aceitar o tratamento dos dados conforme a política.',
+      }),
+    }),
+    username: usernameSchema,
+    country: countrySchema,
+    stateProvince: stateProvinceSchema,
+    city: citySchema,
+  })
+  .superRefine(refineBrazilState);
+
 function normalizeUsername(raw: string) {
   return raw
     .trim()
@@ -121,6 +137,123 @@ function userPublic(u: {
 }
 
 export async function authRoutes(fastify: FastifyInstance) {
+  await registerGoogleAuthRoutes(fastify);
+
+  fastify.get('/providers', async () => ({
+    google: isGoogleAuthConfigured(),
+  }));
+
+  fastify.get('/google/pending', async (request, reply) => {
+    const token = (request.query as { token?: string }).token;
+    if (!token) {
+      return reply.code(400).send({ error: 'Token inválido.' });
+    }
+
+    try {
+      const payload = fastify.jwt.verify(token) as {
+        purpose?: string;
+        email?: string;
+        suggestedUsername?: string;
+      };
+      if (payload.purpose !== 'google-pending' || !payload.email) {
+        throw new Error('invalid');
+      }
+      return {
+        email: payload.email,
+        suggestedUsername: payload.suggestedUsername ?? '',
+      };
+    } catch {
+      return reply.code(400).send({
+        error: 'Sessão Google expirada. Clique em «Entrar com Google» novamente.',
+      });
+    }
+  });
+
+  fastify.post('/google/register', async (request, reply) => {
+    const parsed = googleRegisterSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: firstZodIssue(parsed.error) });
+    }
+    const body = parsed.data;
+
+    let googlePayload: { purpose?: string; sub?: string; email?: string };
+    try {
+      googlePayload = fastify.jwt.verify(body.pendingToken) as typeof googlePayload;
+      if (googlePayload.purpose !== 'google-pending' || !googlePayload.sub || !googlePayload.email) {
+        throw new Error('invalid');
+      }
+    } catch {
+      return reply.code(400).send({
+        error: 'Sessão Google expirada. Clique em «Entrar com Google» novamente.',
+      });
+    }
+
+    const username = normalizeUsername(body.username);
+    const email = googlePayload.email;
+
+    const emailTaken = await fastify.prisma.user.findUnique({ where: { email } });
+    if (emailTaken) {
+      return reply.code(409).send({
+        error: 'Este e-mail já está cadastrado. Use Entrar com Google ou e-mail.',
+      });
+    }
+
+    const usernameTaken = await fastify.prisma.user.findUnique({ where: { username } });
+    if (usernameTaken) {
+      return reply.code(409).send({
+        error: 'Este nome de usuário já está em uso. Escolha outro.',
+      });
+    }
+
+    const identityTaken = await fastify.prisma.authIdentity.findUnique({
+      where: {
+        provider_providerId: { provider: 'google', providerId: googlePayload.sub },
+      },
+    });
+    if (identityTaken) {
+      return reply.code(409).send({
+        error: 'Esta conta Google já está vinculada. Use Entrar.',
+      });
+    }
+
+    const stateStored =
+      body.country === 'BR' ? body.stateProvince.trim().toUpperCase() : body.stateProvince.trim();
+
+    const user = await fastify.prisma.user.create({
+      data: {
+        email,
+        username,
+        country: body.country,
+        stateProvince: stateStored,
+        city: body.city.trim(),
+        privacyAcceptedAt: new Date(),
+        emailVerifiedAt: new Date(),
+        emailVerificationToken: null,
+        authIdentities: {
+          create: {
+            provider: 'google',
+            providerId: googlePayload.sub,
+            email,
+          },
+        },
+      },
+    });
+
+    await fastify.prisma.rating.create({
+      data: {
+        userId: user.id,
+        rating: 1500,
+      },
+    });
+
+    const token = fastify.jwt.sign({ userId: user.id, email: user.email });
+
+    return {
+      token,
+      user: userPublic(user),
+    };
+  });
+
   fastify.post('/register', async (request, reply) => {
     const parsed = registerBodySchema.safeParse(request.body);
     if (!parsed.success) {

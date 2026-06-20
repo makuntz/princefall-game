@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BR_STATE_OPTIONS,
   COUNTRY_OPTIONS,
 } from '@princefall/shared';
+import { api } from '../api';
+import { getGoogleLoginUrl } from '../config';
 import './game/GameStyles.css';
 
 export interface RegisterPayload {
@@ -14,9 +16,20 @@ export interface RegisterPayload {
   acceptedPrivacyPolicy: boolean;
 }
 
+export interface GoogleRegisterPayload {
+  pendingToken: string;
+  username: string;
+  country: string;
+  stateProvince: string;
+  city: string;
+  acceptedPrivacyPolicy: boolean;
+}
+
 interface LoginProps {
   onLogin: (email: string) => Promise<void>;
   onRegister: (data: RegisterPayload) => Promise<void>;
+  onGoogleRegister?: (data: GoogleRegisterPayload) => Promise<void>;
+  googlePendingToken?: string | null;
   sessionBanner?: string | null;
   onDismissSessionBanner?: () => void;
 }
@@ -24,10 +37,13 @@ interface LoginProps {
 export function Login({
   onLogin,
   onRegister,
+  onGoogleRegister,
+  googlePendingToken,
   sessionBanner,
   onDismissSessionBanner,
 }: LoginProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('register');
+  const googleSignup = !!googlePendingToken;
+  const [mode, setMode] = useState<'login' | 'register'>(googleSignup ? 'register' : 'register');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [countryCode, setCountryCode] = useState('BR');
@@ -36,6 +52,58 @@ export function Login({
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleEnabled, setGoogleEnabled] = useState(
+    import.meta.env.VITE_GOOGLE_LOGIN_ENABLED === 'true',
+  );
+  const [loadingGooglePending, setLoadingGooglePending] = useState(googleSignup);
+
+  useEffect(() => {
+    api
+      .get('/auth/providers', { skipSessionRedirect: true })
+      .then((res: { google?: boolean }) => {
+        if (typeof res.google === 'boolean') {
+          setGoogleEnabled(res.google);
+        }
+      })
+      .catch(() => {
+        /* mantém fallback de env */
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!googlePendingToken) {
+      setLoadingGooglePending(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = (await api.get(
+          `/auth/google/pending?token=${encodeURIComponent(googlePendingToken)}`,
+          { skipSessionRedirect: true },
+        )) as { email: string; suggestedUsername?: string };
+        if (cancelled) return;
+        setEmail(info.email);
+        if (info.suggestedUsername) {
+          setUsername(info.suggestedUsername);
+        }
+        setMode('register');
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Sessão Google inválida.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingGooglePending(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [googlePendingToken]);
 
   const resetErrorOnChange = () => setError(null);
 
@@ -78,6 +146,15 @@ export function Login({
     try {
       if (mode === 'login') {
         await onLogin(email);
+      } else if (googleSignup && onGoogleRegister && googlePendingToken) {
+        await onGoogleRegister({
+          pendingToken: googlePendingToken,
+          username,
+          country: countryCode,
+          stateProvince: isBrazil ? stateProvince.toUpperCase() : stateProvince.trim(),
+          city: city.trim(),
+          acceptedPrivacyPolicy: true,
+        });
       } else {
         await onRegister({
           email,
@@ -113,6 +190,7 @@ export function Login({
             </div>
           )}
 
+          {!googleSignup && (
           <div className="auth-tabs" role="tablist" aria-label="Cadastro ou entrar">
             <button
               type="button"
@@ -139,16 +217,47 @@ export function Login({
               Entrar
             </button>
           </div>
+          )}
 
-          {mode === 'register' && (
+          {mode === 'register' && !googleSignup && (
             <p className="auth-hint">
               País e UF/cidade são usados para rankings regionais (armazenados conforme seu aceite).
             </p>
           )}
+          {mode === 'register' && googleSignup && (
+            <p className="auth-hint">
+              Complete seu perfil para finalizar o cadastro com Google. Seu e-mail já foi confirmado
+              pela Google.
+            </p>
+          )}
           {mode === 'login' && (
-            <p className="auth-hint">Use o mesmo e-mail do cadastro.</p>
+            <p className="auth-hint">Use o mesmo e-mail do cadastro ou entre com Google.</p>
           )}
 
+          {googleEnabled && mode === 'login' && (
+            <>
+              <button
+                type="button"
+                className="auth-google-btn"
+                disabled={loading || loadingGooglePending}
+                onClick={() => {
+                  window.location.href = getGoogleLoginUrl();
+                }}
+              >
+                <span className="auth-google-icon" aria-hidden="true">
+                  G
+                </span>
+                Entrar com Google
+              </button>
+              <div className="auth-divider">
+                <span>ou</span>
+              </div>
+            </>
+          )}
+
+          {loadingGooglePending ? (
+            <p className="auth-hint">Carregando dados da conta Google…</p>
+          ) : (
           <form onSubmit={handleSubmit} noValidate>
             <div className="auth-fields">
               <div>
@@ -160,14 +269,15 @@ export function Login({
                   type="email"
                   name="email"
                   autoComplete="email"
-                  className="auth-input"
+                  className={`auth-input${googleSignup ? ' auth-input--readonly' : ''}`}
                   placeholder="seu@email.com"
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     resetErrorOnChange();
                   }}
-                  disabled={loading}
+                  disabled={loading || googleSignup}
+                  readOnly={googleSignup}
                 />
               </div>
 
@@ -321,10 +431,17 @@ export function Login({
 
             {error && <div className="auth-error">{error}</div>}
 
-            <button type="submit" className="auth-submit" disabled={loading}>
-              {loading ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
+            <button type="submit" className="auth-submit" disabled={loading || loadingGooglePending}>
+              {loading
+                ? 'Aguarde…'
+                : googleSignup
+                  ? 'Concluir cadastro'
+                  : mode === 'login'
+                    ? 'Entrar'
+                    : 'Criar conta'}
             </button>
           </form>
+          )}
         </div>
       </div>
     </div>
