@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { GameBoard } from './components/game/GameBoard';
-import { Login, type RegisterPayload } from './components/Login';
+import { Login, type RegisterPayload, type GoogleRegisterPayload } from './components/Login';
 import { GameList } from './components/GameList';
 import { LocalGame } from './components/LocalGame';
 import { Leaderboard } from './components/Leaderboard';
@@ -18,6 +18,54 @@ function App() {
   const [sessionBanner, setSessionBanner] = useState<string | null>(null);
   /** Incrementado após confirmar e-mail pela URL — força GameList a atualizar /auth/me */
   const [emailVerifyNonce, setEmailVerifyNonce] = useState(0);
+  /** Token JWT curto após OAuth Google para completar cadastro */
+  const [googlePendingToken, setGooglePendingToken] = useState<string | null>(null);
+
+  const clearAuthHash = () => {
+    if (!window.location.hash) return;
+    window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}`);
+  };
+
+  useEffect(() => {
+    const hash = window.location.hash.startsWith('#')
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    const hashParams = new URLSearchParams(hash);
+    const authToken = hashParams.get('authToken');
+    const pendingGoogle = hashParams.get('pendingGoogle');
+
+    if (authToken) {
+      localStorage.setItem('token', authToken);
+      setToken(authToken);
+      setGooglePendingToken(null);
+      setSessionBanner(null);
+      setView('list');
+      clearAuthHash();
+      return;
+    }
+
+    if (pendingGoogle) {
+      setGooglePendingToken(pendingGoogle);
+      setView('login');
+      clearAuthHash();
+    }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('authError');
+    if (!authError) return;
+
+    setSessionBanner(decodeURIComponent(authError));
+    setView('login');
+    params.delete('authError');
+    const q = params.toString();
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash}`,
+    );
+  }, []);
 
   useEffect(() => {
     const onExpired = () => {
@@ -88,6 +136,15 @@ function App() {
     const res = await api.post('/auth/login', { email });
     setToken(res.token);
     localStorage.setItem('token', res.token);
+    setView('list');
+  };
+
+  const handleGoogleRegister = async (data: GoogleRegisterPayload) => {
+    const res = await api.post('/auth/google/register', data);
+    setToken(res.token);
+    localStorage.setItem('token', res.token);
+    setGooglePendingToken(null);
+    setSessionBanner(null);
     setView('list');
   };
 
@@ -169,6 +226,8 @@ function App() {
       <Login
         onLogin={handleLogin}
         onRegister={handleRegister}
+        onGoogleRegister={handleGoogleRegister}
+        googlePendingToken={googlePendingToken}
         sessionBanner={sessionBanner}
         onDismissSessionBanner={() => setSessionBanner(null)}
       />

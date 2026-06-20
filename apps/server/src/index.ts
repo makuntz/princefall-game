@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import { PrismaClient } from '@prisma/client';
 import { authRoutes } from './routes/auth';
@@ -25,6 +26,10 @@ fastify.register(cors, {
   origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
+});
+
+fastify.register(cookie, {
+  secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET || 'your-secret-key-change-in-production',
 });
 
 fastify.register(jwt, {
