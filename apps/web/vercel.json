@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build --workspace=@princefall/game-core && npm run build --workspace=@princefall/shared && npm run build",
+  "buildCommand": "npm run build --workspace=@princefall/game-core && npm run build --workspace=@princefall/shared && npm run build --workspace=@princefall/game-ai && npm run build",
   "outputDirectory": "dist",
   "installCommand": "cd ../.. && npm install",
   "framework": "vite",

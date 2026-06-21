@@ -9,6 +9,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@princefall/game-ai": "*",
     "@princefall/game-core": "*",
     "@princefall/shared": "*",
     "react": "^18.2.0",
