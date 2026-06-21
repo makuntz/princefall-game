@@ -4,7 +4,8 @@ import './game/GameStyles.css';
 
 interface Game {
   id: string;
-  status: string;
+  status?: string;
+  phase?: string;
   whitePlayer: { id: string; username: string };
   blackPlayer: { id: string; username: string } | null;
   inviteCode: string;
@@ -50,6 +51,8 @@ export function GameList({
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [gamePendingDelete, setGamePendingDelete] = useState<Game | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const refreshSessionUser = async () => {
     try {
@@ -148,6 +151,22 @@ export function GameList({
       alert(msg);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao reenviar.');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!gamePendingDelete) return;
+
+    setDeleting(true);
+    try {
+      await api.delete(`/games/${gamePendingDelete.id}`, { token });
+      setGames(prev => prev.filter(g => g.id !== gamePendingDelete.id));
+      setGamePendingDelete(null);
+    } catch (err) {
+      console.error('Error deleting game:', err);
+      alert(err instanceof Error ? err.message : 'Erro ao excluir partida');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -283,15 +302,85 @@ export function GameList({
                     <strong>Pretas:</strong> {game.blackPlayer?.username || 'Aguardando...'}
                   </div>
                   <div className="game-list-card-meta">
-                    Status: {game.status} | Código: {game.inviteCode}
+                    Status: {game.phase || game.status || '—'} | Código: {game.inviteCode}
                   </div>
                 </div>
-                <span className="game-list-card-arrow" aria-hidden>
-                  →
-                </span>
+                <div className="game-list-card-actions">
+                  <button
+                    type="button"
+                    className="game-list-card-delete"
+                    aria-label={`Excluir partida ${game.inviteCode}`}
+                    title="Excluir partida"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setGamePendingDelete(game);
+                    }}
+                  >
+                    <svg
+                      className="game-list-delete-icon"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                      focusable="false"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                      />
+                    </svg>
+                  </button>
+                  <span className="game-list-card-arrow" aria-hidden>
+                    →
+                  </span>
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {gamePendingDelete && (
+        <div
+          className="game-list-modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!deleting) setGamePendingDelete(null);
+          }}
+        >
+          <div
+            className="game-list-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-game-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-game-title" className="game-list-modal-title">
+              Excluir partida?
+            </h2>
+            <p className="game-list-modal-text">
+              Tem certeza que deseja excluir esta partida? Esta ação não pode ser desfeita.
+            </p>
+            <p className="game-list-modal-meta">
+              Código: <strong>{gamePendingDelete.inviteCode}</strong>
+            </p>
+            <div className="game-list-modal-actions">
+              <button
+                type="button"
+                className="game-list-btn game-list-btn--outline"
+                disabled={deleting}
+                onClick={() => setGamePendingDelete(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="game-list-btn game-list-btn--danger"
+                disabled={deleting}
+                onClick={handleConfirmDelete}
+              >
+                {deleting ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

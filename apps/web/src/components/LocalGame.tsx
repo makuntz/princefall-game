@@ -8,12 +8,14 @@ import {
   getLegalMoves,
   positionToString,
   Position,
+  serializeState,
 } from '@princefall/game-core';
 import {
   chooseBestComputerMove,
   chooseComputerGeneralPosition,
   formatMoveDescription,
 } from '@princefall/game-ai';
+import { api } from '../api';
 import { ModeSelectionScreen, LocalPlayChoice } from './game/ModeSelectionScreen';
 import { OpponentSelectionScreen } from './game/OpponentSelectionScreen';
 import { ColorSelectionScreen } from './game/ColorSelectionScreen';
@@ -45,7 +47,7 @@ function createImperialStateForComputer(humanColor: 'white' | 'black'): GameStat
   return state;
 }
 
-export function LocalGame({ onBack }: { onBack: () => void }) {
+export function LocalGame({ onBack, token }: { onBack: () => void; token?: string | null }) {
   const [menu, setMenu] = useState(true);
   const [lastMode, setLastMode] = useState<LocalPlayChoice>('imperial');
   const [imperialFlowStep, setImperialFlowStep] = useState<ImperialFlowStep>('opponent');
@@ -62,6 +64,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
   const forfeitRef = useRef(false);
   const stateRef = useRef(gameState);
   const computerThinkingRef = useRef(false);
+  const computerGameSavedRef = useRef(false);
   stateRef.current = gameState;
 
   const computerColor: 'white' | 'black' = humanColor === 'white' ? 'black' : 'white';
@@ -171,6 +174,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       forfeitRef.current = false;
       computerThinkingRef.current = false;
       setComputerThinking(false);
+      computerGameSavedRef.current = false;
 
       if (mode === 'traditional') {
         setOpponentMode('twoPlayers');
@@ -230,6 +234,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     setHumanColor('white');
     computerThinkingRef.current = false;
     setComputerThinking(false);
+    computerGameSavedRef.current = false;
     setGameState(createImperialInitialState());
     resetClocks();
   }, [resetClocks]);
@@ -240,6 +245,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     forfeitRef.current = false;
     computerThinkingRef.current = false;
     setComputerThinking(false);
+    computerGameSavedRef.current = false;
     resetClocks();
 
     if (lastMode === 'traditional') {
@@ -312,6 +318,51 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     setSelectedPos(null);
     setSwapMode(false);
   }, [whiteClock, blackClock, gameState.status, gameState.gameMode, gameState.moveNumber, clockedModes]);
+
+  useEffect(() => {
+    if (opponentMode !== 'computer') {
+      return;
+    }
+    if (gameState.status !== 'finished') {
+      return;
+    }
+    if (!token) {
+      return;
+    }
+    if (computerGameSavedRef.current) {
+      return;
+    }
+
+    computerGameSavedRef.current = true;
+
+    (async () => {
+      try {
+        await api.post(
+          '/games/vs-computer',
+          {
+            humanColor,
+            gameState: serializeState(gameState),
+            whiteTimeMs: whiteClock * 1000,
+            blackTimeMs: blackClock * 1000,
+          },
+          { token }
+        );
+        setMessage('Fim de jogo. Partida salva no historico.');
+      } catch (err) {
+        computerGameSavedRef.current = false;
+        console.error('Erro ao salvar partida vs computador:', err);
+        setMessage('Fim de jogo. Nao foi possivel salvar a partida.');
+      }
+    })();
+  }, [
+    opponentMode,
+    gameState.status,
+    token,
+    humanColor,
+    gameState,
+    whiteClock,
+    blackClock,
+  ]);
 
   const handleSetupWhite = (pos: Position) => {
     let nextState = applyAction(gameState, {

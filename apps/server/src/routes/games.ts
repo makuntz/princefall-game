@@ -36,6 +36,46 @@ const setupGeneralSchema = z.object({
   }),
 });
 
+const saveVsComputerSchema = z.object({
+  humanColor: z.enum(['white', 'black']),
+  gameState: z.object({
+    gameMode: z.enum(['imperial', 'traditional']).optional(),
+    board: z.record(
+      z.object({
+        type: z.string(),
+        color: z.enum(['white', 'black']),
+        hasMoved: z.boolean().optional(),
+        canSwapWithPrince: z.boolean().optional(),
+      })
+    ),
+    currentTurn: z.enum(['white', 'black']),
+    moveNumber: z.number().int(),
+    whiteGeneralPosition: z
+      .object({
+        col: z.enum(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']),
+        row: z.number().int().min(1).max(9),
+      })
+      .optional(),
+    blackGeneralPosition: z
+      .object({
+        col: z.enum(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']),
+        row: z.number().int().min(1).max(9),
+      })
+      .optional(),
+    whiteKingSwapped: z.boolean(),
+    blackKingSwapped: z.boolean(),
+    status: z.enum(['setup', 'coinflip', 'ready', 'playing', 'finished']),
+    winner: z.enum(['white', 'black']).optional(),
+    finishedReason: z
+      .enum(['prince_capture', 'king_capture', 'timeout', 'timeout_draw', 'resign', 'aborted'])
+      .optional(),
+    whiteImperialCapturePoints: z.number().optional(),
+    blackImperialCapturePoints: z.number().optional(),
+  }),
+  whiteTimeMs: z.number().int().min(0).optional(),
+  blackTimeMs: z.number().int().min(0).optional(),
+});
+
 async function authenticate(request: any, reply: any) {
   try {
     await request.jwtVerify();
@@ -375,6 +415,37 @@ export async function gameRoutes(fastify: FastifyInstance) {
     };
   });
 
+  fastify.post('/vs-computer', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as any).userId;
+    const body = saveVsComputerSchema.parse(request.body);
+
+    const result = await gameService.saveVsComputerGame(fastify.prisma, userId, {
+      humanColor: body.humanColor,
+      gameState: body.gameState as import('@princefall/game-core').SerializedGameState,
+      whiteTimeMs: body.whiteTimeMs,
+      blackTimeMs: body.blackTimeMs,
+    });
+
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    const saved = result.game as typeof result.game & {
+      whitePlayer: { id: string; username: string };
+      blackPlayer: { id: string; username: string } | null;
+    };
+
+    return {
+      game: {
+        id: saved.id,
+        inviteCode: saved.inviteCode,
+        phase: saved.phase,
+        whitePlayer: saved.whitePlayer,
+        blackPlayer: saved.blackPlayer,
+      },
+    };
+  });
+
   fastify.get('/', { preHandler: [authenticate] }, async (request, reply) => {
     const userId = (request.user as any).userId;
 
@@ -391,6 +462,20 @@ export async function gameRoutes(fastify: FastifyInstance) {
     });
 
     return { games };
+  });
+
+  fastify.delete('/:id', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as any).userId;
+    const { id } = request.params as { id: string };
+
+    const result = await gameService.deleteGame(fastify.prisma, id, userId);
+
+    if (!result.success) {
+      const status = result.error === 'Partida não encontrada' ? 404 : 403;
+      return reply.code(status).send({ error: result.error });
+    }
+
+    return { ok: true };
   });
 }
 

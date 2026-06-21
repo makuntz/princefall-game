@@ -79,4 +79,20 @@ export const api = {
 
     return parseJsonResponse(res, options) as Promise<any>;
   },
+
+  async delete(endpoint: string, options: RequestOptions = {}) {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (options.token) {
+      headers['Authorization'] = `Bearer ${options.token}`;
+    }
+
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'DELETE',
+      headers,
+    });
+
+    return parseJsonResponse(res, options) as Promise<any>;
+  },
 };

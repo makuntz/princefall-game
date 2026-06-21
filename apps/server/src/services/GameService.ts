@@ -10,9 +10,12 @@ import {
 } from '@princefall/game-core';
 import type { Color, GameLifecycleStatus } from '@princefall/game-core';
 import { randomBytes } from 'crypto';
+import type { SerializedGameState } from '@princefall/game-core';
 
 type BoardJson = Record<string, { type: Piece['type']; color: Piece['color']; hasMoved?: boolean; canSwapWithPrince?: boolean }>;
 const MATCH_CLOCK_MS = 10 * 60 * 1000;
+const COMPUTER_USER_EMAIL = 'computer@princefall.internal';
+const COMPUTER_USER_USERNAME = 'Computador';
 
 export class GameService {
   private boardToJson(board: Map<string, Piece>): BoardJson {
@@ -727,5 +730,119 @@ export class GameService {
 
   private generateInviteCode(): string {
     return randomBytes(6).toString('hex').toUpperCase();
+  }
+
+  async deleteGame(
+    prisma: PrismaClient,
+    gameId: string,
+    userId: string
+  ): Promise<{ success: true } | { success: false; error: string }> {
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: { id: true, whitePlayerId: true, blackPlayerId: true },
+    });
+
+    if (!game) {
+      return { success: false, error: 'Partida não encontrada' };
+    }
+
+    const isParticipant =
+      game.whitePlayerId === userId || game.blackPlayerId === userId;
+
+    if (!isParticipant) {
+      return { success: false, error: 'Você não participa desta partida' };
+    }
+
+    await prisma.game.delete({ where: { id: gameId } });
+    return { success: true };
+  }
+
+  private async getOrCreateComputerUser(prisma: PrismaClient) {
+    const existing = await prisma.user.findUnique({
+      where: { email: COMPUTER_USER_EMAIL },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    let username = COMPUTER_USER_USERNAME;
+    const usernameTaken = await prisma.user.findUnique({ where: { username } });
+    if (usernameTaken) {
+      username = `${COMPUTER_USER_USERNAME}_${randomBytes(3).toString('hex')}`;
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        email: COMPUTER_USER_EMAIL,
+        username,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    await prisma.rating.create({
+      data: { userId: user.id },
+    });
+
+    return user;
+  }
+
+  async saveVsComputerGame(
+    prisma: PrismaClient,
+    userId: string,
+    payload: {
+      humanColor: Color;
+      gameState: SerializedGameState;
+      whiteTimeMs?: number;
+      blackTimeMs?: number;
+    }
+  ) {
+    const { humanColor, gameState, whiteTimeMs, blackTimeMs } = payload;
+
+    if (gameState.status !== 'finished') {
+      return { success: false as const, error: 'Partida ainda não terminou' };
+    }
+
+    const computer = await this.getOrCreateComputerUser(prisma);
+    const whitePlayerId = humanColor === 'white' ? userId : computer.id;
+    const blackPlayerId = humanColor === 'black' ? userId : computer.id;
+
+    let winnerId: string | null = null;
+    if (gameState.winner === 'white') {
+      winnerId = whitePlayerId;
+    } else if (gameState.winner === 'black') {
+      winnerId = blackPlayerId;
+    }
+
+    const game = await prisma.game.create({
+      data: {
+        whitePlayerId,
+        blackPlayerId,
+        inviteCode: this.generateInviteCode(),
+        gameMode: gameState.gameMode ?? 'imperial',
+        board: gameState.board as any,
+        currentTurn: gameState.currentTurn,
+        phase: 'finished',
+        moveNumber: gameState.moveNumber,
+        whiteGeneralPos: (gameState.whiteGeneralPosition ?? undefined) as any,
+        blackGeneralPos: (gameState.blackGeneralPosition ?? undefined) as any,
+        whiteKingSwapped: gameState.whiteKingSwapped,
+        blackKingSwapped: gameState.blackKingSwapped,
+        whiteImperialCapturePoints: gameState.whiteImperialCapturePoints ?? 0,
+        blackImperialCapturePoints: gameState.blackImperialCapturePoints ?? 0,
+        whiteTimeMs: whiteTimeMs ?? MATCH_CLOCK_MS,
+        blackTimeMs: blackTimeMs ?? MATCH_CLOCK_MS,
+        winnerId,
+        finishedReason: gameState.finishedReason ?? undefined,
+        finishedAt: new Date(),
+        version: 1,
+      },
+      include: {
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } },
+      },
+    });
+
+    return { success: true as const, game };
   }
 }

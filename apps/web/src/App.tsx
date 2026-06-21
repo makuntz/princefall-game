@@ -310,7 +310,7 @@ function App() {
   }
 
   if (view === 'local') {
-    return <LocalGame onBack={() => setView('list')} />;
+    return <LocalGame onBack={() => setView('list')} token={token} />;
   }
 
   // Fallback: should not reach here, but provide a safe default
