@@ -9,7 +9,14 @@ import {
   positionToString,
   Position,
 } from '@princefall/game-core';
+import {
+  chooseBestComputerMove,
+  chooseComputerGeneralPosition,
+  formatMoveDescription,
+} from '@princefall/game-ai';
 import { ModeSelectionScreen, LocalPlayChoice } from './game/ModeSelectionScreen';
+import { OpponentSelectionScreen } from './game/OpponentSelectionScreen';
+import { ColorSelectionScreen } from './game/ColorSelectionScreen';
 import { SetupScreen } from './game/SetupScreen';
 import { CoinflipScreen } from './game/CoinflipScreen';
 import { LocalChessBoard } from './game/LocalChessBoard';
@@ -20,19 +27,44 @@ import './game/GameStyles.css';
 /** 10 minutos por lado (imperial e tradicional no local). */
 const MATCH_CLOCK_SECONDS = 600;
 
+type OpponentMode = 'twoPlayers' | 'computer';
+type ImperialFlowStep = 'opponent' | 'color' | 'playing';
+
+function createImperialStateForComputer(humanColor: 'white' | 'black'): GameState {
+  let state = createImperialInitialState();
+
+  if (humanColor === 'black') {
+    const whitePos = chooseComputerGeneralPosition('white');
+    state = applyAction(state, {
+      type: 'SETUP_GENERAL',
+      payload: { position: whitePos },
+      playerColor: 'white',
+    });
+  }
+
+  return state;
+}
+
 export function LocalGame({ onBack }: { onBack: () => void }) {
   const [menu, setMenu] = useState(true);
   const [lastMode, setLastMode] = useState<LocalPlayChoice>('imperial');
+  const [imperialFlowStep, setImperialFlowStep] = useState<ImperialFlowStep>('opponent');
+  const [opponentMode, setOpponentMode] = useState<OpponentMode>('twoPlayers');
+  const [humanColor, setHumanColor] = useState<'white' | 'black'>('white');
   const [gameState, setGameState] = useState<GameState>(createImperialInitialState());
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [swapMode, setSwapMode] = useState(false);
   const [message, setMessage] = useState('');
+  const [computerThinking, setComputerThinking] = useState(false);
 
   const [whiteClock, setWhiteClock] = useState(MATCH_CLOCK_SECONDS);
   const [blackClock, setBlackClock] = useState(MATCH_CLOCK_SECONDS);
   const forfeitRef = useRef(false);
   const stateRef = useRef(gameState);
+  const computerThinkingRef = useRef(false);
   stateRef.current = gameState;
+
+  const computerColor: 'white' | 'black' = humanColor === 'white' ? 'black' : 'white';
 
   const resetClocks = useCallback(() => {
     setWhiteClock(MATCH_CLOCK_SECONDS);
@@ -40,28 +72,164 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     forfeitRef.current = false;
   }, []);
 
-  const startMode = useCallback((mode: LocalPlayChoice) => {
-    setLastMode(mode);
-    setMenu(false);
-    setSelectedPos(null);
-    setSwapMode(false);
-    forfeitRef.current = false;
-    if (mode === 'traditional') {
-      setGameState(createTraditionalInitialState());
-      setMessage('Clique numa peça branca para começar.');
-      resetClocks();
-    } else {
-      setGameState(createImperialInitialState());
+  const updateTurnStatus = useCallback(
+    (state: GameState) => {
+      if (state.status === 'finished') {
+        return;
+      }
+
+      if (opponentMode === 'computer' && state.status === 'playing') {
+        if (state.currentTurn === humanColor) {
+          const colorText = humanColor === 'white' ? 'branca' : 'preta';
+          setMessage(`Sua vez. Selecione uma peca ${colorText}.`);
+        } else {
+          setMessage('Computador pensando...');
+        }
+        return;
+      }
+
+      if (state.status === 'playing') {
+        const colorText = state.currentTurn === 'white' ? 'branca' : 'preta';
+        setMessage(`Selecione uma peca ${colorText} para mover.`);
+      }
+    },
+    [humanColor, opponentMode]
+  );
+
+  const maybeTriggerComputerMove = useCallback(
+    (state: GameState) => {
+      if (opponentMode !== 'computer') {
+        return;
+      }
+      if (state.status !== 'playing') {
+        return;
+      }
+      if (state.currentTurn !== computerColor) {
+        return;
+      }
+      if (computerThinkingRef.current) {
+        return;
+      }
+
+      computerThinkingRef.current = true;
+      setComputerThinking(true);
+      setMessage('Computador pensando...');
+
+      window.setTimeout(() => {
+        const currentState = stateRef.current;
+
+        if (
+          currentState.status !== 'playing' ||
+          currentState.currentTurn !== computerColor ||
+          opponentMode !== 'computer'
+        ) {
+          computerThinkingRef.current = false;
+          setComputerThinking(false);
+          return;
+        }
+
+        const move = chooseBestComputerMove(currentState, computerColor, humanColor);
+
+        if (!move) {
+          setMessage('Computador nao possui movimentos validos.');
+          computerThinkingRef.current = false;
+          setComputerThinking(false);
+          return;
+        }
+
+        const newState = applyAction(currentState, {
+          type: 'MOVE',
+          payload: { move },
+          playerColor: computerColor,
+        });
+
+        setGameState(newState);
+        setSelectedPos(null);
+
+        if (newState.status === 'finished') {
+          setMessage('Fim de jogo.');
+        } else {
+          const colorText = humanColor === 'white' ? 'branca' : 'preta';
+          setMessage(
+            `Computador moveu ${formatMoveDescription(move)}. Sua vez — selecione uma peca ${colorText}.`
+          );
+        }
+
+        computerThinkingRef.current = false;
+        setComputerThinking(false);
+      }, 600);
+    },
+    [computerColor, humanColor, opponentMode]
+  );
+
+  const startMode = useCallback(
+    (mode: LocalPlayChoice) => {
+      setLastMode(mode);
+      setMenu(false);
+      setSelectedPos(null);
+      setSwapMode(false);
+      forfeitRef.current = false;
+      computerThinkingRef.current = false;
+      setComputerThinking(false);
+
+      if (mode === 'traditional') {
+        setOpponentMode('twoPlayers');
+        setImperialFlowStep('playing');
+        setGameState(createTraditionalInitialState());
+        setMessage('Clique numa peca branca para comecar.');
+        resetClocks();
+        return;
+      }
+
+      setImperialFlowStep('opponent');
       setMessage('');
       resetClocks();
-    }
-  }, [resetClocks]);
+    },
+    [resetClocks]
+  );
+
+  const startTwoPlayersImperial = useCallback(() => {
+    setOpponentMode('twoPlayers');
+    setImperialFlowStep('playing');
+    setGameState(createImperialInitialState());
+    setMessage('');
+    setSelectedPos(null);
+    setSwapMode(false);
+  }, []);
+
+  const startComputerMode = useCallback(() => {
+    setOpponentMode('computer');
+    setImperialFlowStep('color');
+  }, []);
+
+  const startComputerAsWhite = useCallback(() => {
+    setHumanColor('white');
+    setImperialFlowStep('playing');
+    setGameState(createImperialInitialState());
+    setMessage('Brancas: escolham a posicao do General na linha 7.');
+    setSelectedPos(null);
+    setSwapMode(false);
+  }, []);
+
+  const startComputerAsBlack = useCallback(() => {
+    setHumanColor('black');
+    setImperialFlowStep('playing');
+    setGameState(createImperialStateForComputer('black'));
+    setMessage('Pretas: escolham a posicao do General na linha 3.');
+    setSelectedPos(null);
+    setSwapMode(false);
+  }, []);
 
   const backToModeMenu = useCallback(() => {
     setMenu(true);
     setSelectedPos(null);
     setSwapMode(false);
     setMessage('');
+    setImperialFlowStep('opponent');
+    setOpponentMode('twoPlayers');
+    setHumanColor('white');
+    computerThinkingRef.current = false;
+    setComputerThinking(false);
     setGameState(createImperialInitialState());
     resetClocks();
   }, [resetClocks]);
@@ -70,15 +238,29 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     setSelectedPos(null);
     setSwapMode(false);
     forfeitRef.current = false;
+    computerThinkingRef.current = false;
+    setComputerThinking(false);
     resetClocks();
+
     if (lastMode === 'traditional') {
       setGameState(createTraditionalInitialState());
       setMessage('Partida reiniciada. Vez das Brancas.');
-    } else {
-      setGameState(createImperialInitialState());
-      setMessage('');
+      return;
     }
-  }, [lastMode, resetClocks]);
+
+    if (opponentMode === 'computer') {
+      setGameState(createImperialStateForComputer(humanColor));
+      setMessage(
+        humanColor === 'white'
+          ? 'Brancas: escolham a posicao do General na linha 7.'
+          : 'Pretas: escolham a posicao do General na linha 3.'
+      );
+      return;
+    }
+
+    setGameState(createImperialInitialState());
+    setMessage('');
+  }, [humanColor, lastMode, opponentMode, resetClocks]);
 
   const clockedModes =
     gameState.gameMode === 'imperial' || gameState.gameMode === 'traditional';
@@ -93,6 +275,9 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     if (forfeitRef.current) {
       return undefined;
     }
+    if (computerThinking) {
+      return undefined;
+    }
 
     const id = window.setInterval(() => {
       const s = stateRef.current;
@@ -104,7 +289,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [clockedModes, gameState.status, gameState.gameMode, gameState.moveNumber]);
+  }, [clockedModes, computerThinking, gameState.status, gameState.gameMode, gameState.moveNumber]);
 
   useEffect(() => {
     if (!clockedModes || gameState.status !== 'playing') {
@@ -129,23 +314,38 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
   }, [whiteClock, blackClock, gameState.status, gameState.gameMode, gameState.moveNumber, clockedModes]);
 
   const handleSetupWhite = (pos: Position) => {
-    const action: GameAction = {
+    let nextState = applyAction(gameState, {
       type: 'SETUP_GENERAL',
       payload: { position: pos },
       playerColor: 'white',
-    };
-    setGameState(s => applyAction(s, action));
-    setMessage('Pretas: escolham a posição do General na linha 3.');
+    });
+
+    if (opponentMode === 'computer') {
+      const blackPos = chooseComputerGeneralPosition('black');
+      nextState = applyAction(nextState, {
+        type: 'SETUP_GENERAL',
+        payload: { position: blackPos },
+        playerColor: 'black',
+      });
+    } else {
+      setMessage('Pretas: escolham a posicao do General na linha 3.');
+    }
+
+    setGameState(nextState);
+
+    if (opponentMode === 'computer') {
+      setMessage('Cara ou coroa para definir quem comeca.');
+    }
   };
 
   const handleSetupBlack = (pos: Position) => {
-    const action: GameAction = {
+    const nextState = applyAction(gameState, {
       type: 'SETUP_GENERAL',
       payload: { position: pos },
       playerColor: 'black',
-    };
-    setGameState(s => applyAction(s, action));
-    setMessage('Cara ou coroa para definir quem começa.');
+    });
+    setGameState(nextState);
+    setMessage('Cara ou coroa para definir quem comeca.');
   };
 
   const handleResolveCoinflip = async () => {
@@ -159,12 +359,24 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
   };
 
   const handleBeginPlaying = async () => {
-    setGameState(s => applyAction(s, { type: 'BEGIN_PLAYING' }));
-    setMessage('Clique numa peça para mover.');
+    const nextState = applyAction(gameState, { type: 'BEGIN_PLAYING' });
+    setGameState(nextState);
+    updateTurnStatus(nextState);
+    maybeTriggerComputerMove(nextState);
   };
 
   const handleCellClick = (pos: Position) => {
     if (gameState.status !== 'playing') {
+      return;
+    }
+
+    if (computerThinking) {
+      setMessage('Aguarde a jogada do computador.');
+      return;
+    }
+
+    if (opponentMode === 'computer' && gameState.currentTurn === computerColor) {
+      setMessage('Aguarde a jogada do computador.');
       return;
     }
 
@@ -178,7 +390,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       const isValidMove = legalMoves.some(m => m.col === pos.col && m.row === pos.row);
 
       if (!isValidMove) {
-        setMessage('Movimento inválido.');
+        setMessage('Movimento invalido.');
         setSelectedPos(null);
         return;
       }
@@ -203,7 +415,8 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
         return;
       }
 
-      setMessage('Selecione uma peça.');
+      updateTurnStatus(newState);
+      maybeTriggerComputerMove(newState);
       return;
     }
 
@@ -212,16 +425,32 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       setMessage('Casa vazia.');
       return;
     }
-    if (piece.color !== gameState.currentTurn) {
-      setMessage('Não é o seu turno.');
+
+    if (opponentMode === 'computer' && piece.color === computerColor) {
+      setMessage('Essa peca e do computador.');
       return;
     }
+
+    if (piece.color !== gameState.currentTurn) {
+      if (opponentMode === 'computer') {
+        setMessage('Aguarde a jogada do computador.');
+      } else {
+        setMessage('Nao e o seu turno.');
+      }
+      return;
+    }
+
     setSelectedPos(pos);
-    setMessage(`Peça selecionada: ${positionToString(pos)}`);
+    setMessage(`Peca selecionada: ${positionToString(pos)}`);
   };
 
   const handleSwapClick = (pos: Position) => {
     if (!selectedPos) {
+      return;
+    }
+
+    if (computerThinking || (opponentMode === 'computer' && gameState.currentTurn === computerColor)) {
+      setMessage('Aguarde a jogada do computador.');
       return;
     }
 
@@ -231,7 +460,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     if (!piece1 || !piece2) {
       setSelectedPos(null);
       setSwapMode(false);
-      setMessage('Seleção cancelada.');
+      setMessage('Selecao cancelada.');
       return;
     }
 
@@ -252,7 +481,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped;
 
     if (!canSwap) {
-      setMessage('Esta troca já foi usada neste jogo.');
+      setMessage('Esta troca ja foi usada neste jogo.');
       setSelectedPos(null);
       setSwapMode(false);
       return;
@@ -272,6 +501,8 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     setSelectedPos(null);
     setSwapMode(false);
     setMessage('Troca realizada.');
+    updateTurnStatus(newState);
+    maybeTriggerComputerMove(newState);
   };
 
   const handleSwapMode = () => {
@@ -279,11 +510,16 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
       return;
     }
 
+    if (computerThinking || (opponentMode === 'computer' && gameState.currentTurn === computerColor)) {
+      setMessage('Aguarde a jogada do computador.');
+      return;
+    }
+
     const canSwap =
       gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped;
 
     if (!canSwap) {
-      setMessage('Esta troca já foi usada neste jogo.');
+      setMessage('Esta troca ja foi usada neste jogo.');
       return;
     }
 
@@ -295,16 +531,20 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
   const canSwapButton =
     gameState.gameMode === 'imperial' &&
     gameState.status === 'playing' &&
-    (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped);
+    (gameState.currentTurn === 'white' ? !gameState.whiteKingSwapped : !gameState.blackKingSwapped) &&
+    !(opponentMode === 'computer' && gameState.currentTurn === computerColor);
 
   const legalMoves =
-    selectedPos && !swapMode && gameState.status === 'playing' ? getLegalMoves(gameState, selectedPos) : [];
+    selectedPos && !swapMode && gameState.status === 'playing' && !computerThinking
+      ? getLegalMoves(gameState, selectedPos)
+      : [];
 
   const clockActive: 'white' | 'black' | null =
     clockedModes &&
     gameState.status === 'playing' &&
     gameState.moveNumber >= 1 &&
-    !forfeitRef.current
+    !forfeitRef.current &&
+    !computerThinking
       ? gameState.currentTurn
       : null;
 
@@ -319,8 +559,31 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
     );
   }
 
+  if (lastMode === 'imperial' && imperialFlowStep === 'opponent') {
+    return (
+      <OpponentSelectionScreen
+        onSelectTwoPlayers={startTwoPlayersImperial}
+        onSelectComputer={startComputerMode}
+        onBack={backToModeMenu}
+      />
+    );
+  }
+
+  if (lastMode === 'imperial' && imperialFlowStep === 'color') {
+    return (
+      <ColorSelectionScreen
+        onSelectWhite={startComputerAsWhite}
+        onSelectBlack={startComputerAsBlack}
+        onBack={() => setImperialFlowStep('opponent')}
+      />
+    );
+  }
+
   if (lastMode === 'imperial' && gameState.status === 'setup') {
-    const playerColor = !gameState.whiteGeneralPosition ? 'white' : 'black';
+    const nextSetupColor = !gameState.whiteGeneralPosition ? 'white' : 'black';
+    const playerColor =
+      opponentMode === 'computer' ? humanColor : nextSetupColor;
+
     return (
       <div className="game-container game-container-dark">
         <button type="button" className="back-btn" onClick={backToModeMenu}>
@@ -359,6 +622,9 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
 
       <h1 className="game-play-title">
         {gameState.gameMode === 'imperial' ? 'XADREZ IMPERIAL' : 'XADREZ TRADICIONAL'}
+        {opponentMode === 'computer' && (
+          <span className="game-mode-badge"> vs Computador</span>
+        )}
       </h1>
 
       <div className="game-layout game-layout-stacked">
@@ -376,10 +642,12 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
               ? 'Modo troca: toque no Rei e na Princesa do mesmo lado.'
               : message ||
                 (piece
-                  ? `Peça selecionada: ${positionToString(selectedPos!)} (${pieceLabelPt(piece.type)})`
+                  ? `Peca selecionada: ${positionToString(selectedPos!)} (${pieceLabelPt(piece.type)})`
                   : gameState.lastMove
-                    ? `Última jogada: ${positionToString(gameState.lastMove.from)} → ${positionToString(gameState.lastMove.to)}`
-                    : 'Selecione uma peça.')
+                    ? `Ultima jogada: ${positionToString(gameState.lastMove.from)} → ${positionToString(gameState.lastMove.to)}`
+                    : opponentMode === 'computer'
+                      ? `Sua vez. Selecione uma peca ${humanColor === 'white' ? 'branca' : 'preta'}.`
+                      : 'Selecione uma peca.')
           }
           whiteSeconds={whiteClock}
           blackSeconds={blackClock}
@@ -393,13 +661,13 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
                   type="button"
                   className={`swap-btn ${swapMode ? 'active' : ''}`}
                   onClick={handleSwapMode}
-                  disabled={!canSwapButton || gameState.status === 'finished'}
+                  disabled={!canSwapButton || gameState.status === 'finished' || computerThinking}
                 >
                   {swapMode
                     ? 'Cancelar troca'
                     : gameState.currentTurn === 'white'
-                      ? `Troca Rei–Princesa (brancas): ${gameState.whiteKingSwapped ? 'usada' : 'disponível'}`
-                      : `Troca Rei–Princesa (pretas): ${gameState.blackKingSwapped ? 'usada' : 'disponível'}`}
+                      ? `Troca Rei–Princesa (brancas): ${gameState.whiteKingSwapped ? 'usada' : 'disponivel'}`
+                      : `Troca Rei–Princesa (pretas): ${gameState.blackKingSwapped ? 'usada' : 'disponivel'}`}
                 </button>
               </div>
             ) : undefined
