@@ -5,9 +5,11 @@ export type LocalPlayChoice = 'imperial' | 'traditional';
 interface ModeSelectionScreenProps {
   onSelectMode: (mode: LocalPlayChoice) => void;
   onBack: () => void;
+  /** Modo offline: exibe opção de jogar contra o computador no Imperial. */
+  offline?: boolean;
 }
 
-export function ModeSelectionScreen({ onSelectMode, onBack }: ModeSelectionScreenProps) {
+export function ModeSelectionScreen({ onSelectMode, onBack, offline }: ModeSelectionScreenProps) {
   return (
     <div className="mode-selection-page">
       <button type="button" className="back-btn mode-selection-back" onClick={onBack}>
@@ -32,6 +34,7 @@ export function ModeSelectionScreen({ onSelectMode, onBack }: ModeSelectionScree
             <li>♔ Rei Guerreiro poderoso</li>
             <li>🎲 Escolha inicial do General</li>
             <li>🪙 Sorteio de quem começa</li>
+            {offline && <li>🤖 2 jogadores ou contra o computador</li>}
           </ul>
           <span className="mode-badge">Inovador</span>
         </button>

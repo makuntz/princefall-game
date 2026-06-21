@@ -219,18 +219,16 @@ export function GameList({
           >
             {creating ? 'Criando...' : 'Nova Partida Online'}
           </button>
-          {!import.meta.env.PROD && (
-            <button
-              type="button"
-              className="game-list-btn game-list-btn--outline"
-              onClick={() => {
-                const event = new CustomEvent('startLocalGame');
-                window.dispatchEvent(event);
-              }}
-            >
-              🎮 Jogar local (teste)
-            </button>
-          )}
+          <button
+            type="button"
+            className="game-list-btn game-list-btn--outline"
+            onClick={() => {
+              const event = new CustomEvent('startLocalGame');
+              window.dispatchEvent(event);
+            }}
+          >
+            Jogar offline
+          </button>
         </div>
 
         <div className="game-list-invite">

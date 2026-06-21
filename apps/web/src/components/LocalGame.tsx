@@ -555,6 +555,7 @@ export function LocalGame({ onBack }: { onBack: () => void }) {
         onBack={() => {
           onBack();
         }}
+        offline
       />
     );
   }
