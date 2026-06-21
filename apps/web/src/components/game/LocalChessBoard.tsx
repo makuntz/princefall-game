@@ -35,11 +35,7 @@ export function LocalChessBoard({
   return (
     <div className="board-wrapper board-wrapper-centered">
       <div
-        className="board-container board-container-dynamic"
-        style={{
-          gridTemplateColumns: `minmax(22px, 0.35fr) repeat(${size}, minmax(36px, 1fr)) minmax(22px, 0.35fr)`,
-          gridTemplateRows: `minmax(22px, 0.35fr) repeat(${size}, minmax(36px, 1fr)) minmax(22px, 0.35fr)`,
-        }}
+        className={`board-container board-container-dynamic board-size-${size}`}
       >
         {columns.map((col, idx) => (
           <div
@@ -79,12 +75,10 @@ export function LocalChessBoard({
         ))}
 
         <div
-          className="board board-dynamic"
+          className={`board board-dynamic board-inner-size-${size}`}
           style={{
             gridColumn: `2 / ${gridLineEnd}`,
             gridRow: `2 / ${gridLineEnd}`,
-            gridTemplateColumns: `repeat(${size}, 1fr)`,
-            gridTemplateRows: `repeat(${size}, 1fr)`,
           }}
         >
           {rows.map(row =>
