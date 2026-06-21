@@ -4,14 +4,20 @@
  */
 
 export type * from './types';
+export type { AiDifficulty } from './types';
+export type { ScoredMove } from './minimax';
 export {
+  AI_DIFFICULTY_CONFIG,
+  AI_DIFFICULTY_LABELS,
   chooseBestComputerMove,
+  evaluatePosition,
+  getAllMovesForColor,
+} from './minimax';
+export {
   chooseComputerGeneralPosition,
-  evaluateMove,
   findPrince,
   formatMoveDescription,
-  getAllMovesForColor,
+  getCenterBonus,
   getPieceValue,
   isSquareAttackedBy,
 } from './computerPlayer';
-export type { ScoredMove } from './computerPlayer';

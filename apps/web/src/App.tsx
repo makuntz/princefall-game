@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { GameBoard } from './components/game/GameBoard';
 import { Login, type RegisterPayload, type GoogleRegisterPayload } from './components/Login';
 import { GameList } from './components/GameList';
-import { LocalGame } from './components/LocalGame';
 import { Leaderboard } from './components/Leaderboard';
 import { ModeSelectionScreen, type LocalPlayChoice } from './components/game/ModeSelectionScreen';
 import { EditProfile } from './components/EditProfile';
 import { api } from './api';
+
+const LocalGame = lazy(() =>
+  import('./components/LocalGame').then((m) => ({ default: m.LocalGame }))
+);
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -310,7 +313,20 @@ function App() {
   }
 
   if (view === 'local') {
-    return <LocalGame onBack={() => setView('list')} token={token} />;
+    return (
+      <Suspense
+        fallback={
+          <div
+            className="game-container game-container-dark"
+            style={{ padding: '2rem', textAlign: 'center', color: '#d4af37' }}
+          >
+            Carregando jogo offline...
+          </div>
+        }
+      >
+        <LocalGame onBack={() => setView('list')} token={token} />
+      </Suspense>
+    );
   }
 
   // Fallback: should not reach here, but provide a safe default
