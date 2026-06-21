@@ -24,12 +24,14 @@ interface DifficultyConfig {
   mistakeChance: number;
   /** Max score gap from best move when making a mistake. */
   mistakeDelta: number;
+  /** Max time to spend searching (ms). */
+  maxThinkMs: number;
 }
 
 export const AI_DIFFICULTY_CONFIG: Record<AiDifficulty, DifficultyConfig> = {
-  easy: { depth: 2, mistakeChance: 0.4, mistakeDelta: 150 },
-  medium: { depth: 4, mistakeChance: 0, mistakeDelta: 0 },
-  hard: { depth: 5, mistakeChance: 0, mistakeDelta: 0 },
+  easy: { depth: 2, mistakeChance: 0.4, mistakeDelta: 150, maxThinkMs: 350 },
+  medium: { depth: 4, mistakeChance: 0, mistakeDelta: 0, maxThinkMs: 800 },
+  hard: { depth: 5, mistakeChance: 0, mistakeDelta: 0, maxThinkMs: 1200 },
 };
 
 export const AI_DIFFICULTY_LABELS: Record<
@@ -152,8 +154,13 @@ function minimax(
   depth: number,
   alpha: number,
   beta: number,
-  computerColor: Color
+  computerColor: Color,
+  deadline?: number
 ): number {
+  if (deadline && Date.now() >= deadline) {
+    return evaluatePosition(state, computerColor);
+  }
+
   if (depth === 0 || state.status === 'finished') {
     return evaluatePosition(state, computerColor);
   }
@@ -168,8 +175,11 @@ function minimax(
   if (maximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
+      if (deadline && Date.now() >= deadline) {
+        break;
+      }
       const next = applyMove(state, move);
-      const evalScore = minimax(next, depth - 1, alpha, beta, computerColor);
+      const evalScore = minimax(next, depth - 1, alpha, beta, computerColor, deadline);
       maxEval = Math.max(maxEval, evalScore);
       alpha = Math.max(alpha, evalScore);
       if (beta <= alpha) break;
@@ -179,8 +189,11 @@ function minimax(
 
   let minEval = Infinity;
   for (const move of moves) {
+    if (deadline && Date.now() >= deadline) {
+      break;
+    }
     const next = applyMove(state, move);
-    const evalScore = minimax(next, depth - 1, alpha, beta, computerColor);
+    const evalScore = minimax(next, depth - 1, alpha, beta, computerColor, deadline);
     minEval = Math.min(minEval, evalScore);
     beta = Math.min(beta, evalScore);
     if (beta <= alpha) break;
@@ -218,20 +231,49 @@ export function chooseBestComputerMove(
     return null;
   }
 
-  const scored: Array<{ move: ScoredMove; score: number }> = [];
-
   for (const move of moves) {
     const next = applyMove(state, move);
-
     if (next.status === 'finished' && next.winner === computerColor) {
       return { from: move.from, to: move.to };
     }
-
-    const score = minimax(next, config.depth - 1, -Infinity, Infinity, computerColor);
-    scored.push({ move, score });
   }
 
-  const chosen = pickMoveWithMistake(scored, config);
+  const deadline = Date.now() + config.maxThinkMs;
+  let bestScored: Array<{ move: ScoredMove; score: number }> = [];
+  const startDepth = difficulty === 'easy' ? config.depth : 1;
+
+  for (let depth = startDepth; depth <= config.depth; depth++) {
+    if (Date.now() >= deadline) {
+      break;
+    }
+
+    const scored: Array<{ move: ScoredMove; score: number }> = [];
+    let completed = true;
+
+    for (const move of moves) {
+      if (Date.now() >= deadline) {
+        completed = false;
+        break;
+      }
+
+      const next = applyMove(state, move);
+      const score = minimax(next, depth - 1, -Infinity, Infinity, computerColor, deadline);
+      scored.push({ move, score });
+    }
+
+    if (completed && scored.length === moves.length) {
+      bestScored = scored;
+    }
+  }
+
+  if (bestScored.length === 0) {
+    bestScored = moves.map(move => ({
+      move,
+      score: move.capturedPiece ? getPieceValue(move.capturedPiece) : 0,
+    }));
+  }
+
+  const chosen = pickMoveWithMistake(bestScored, config);
 
   return {
     from: chosen.from,

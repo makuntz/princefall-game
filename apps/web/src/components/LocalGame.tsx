@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   applyAction,
   createImperialInitialState,
@@ -6,17 +6,19 @@ import {
   GameAction,
   GameState,
   getLegalMoves,
+  MoveIntent,
   positionToString,
   Position,
   serializeState,
 } from '@princefall/game-core';
 import {
-  chooseBestComputerMove,
   chooseComputerGeneralPosition,
   formatMoveDescription,
   type AiDifficulty,
 } from '@princefall/game-ai';
 import { api } from '../api';
+import { elapsedSecondsSince, localClockDisplay } from '../utils/localClock';
+import type { ComputerMoveRequest, ComputerMoveResponse } from '../workers/computerMove.types';
 import { ModeSelectionScreen, LocalPlayChoice } from './game/ModeSelectionScreen';
 import { OpponentSelectionScreen } from './game/OpponentSelectionScreen';
 import { ColorSelectionScreen } from './game/ColorSelectionScreen';
@@ -62,21 +64,102 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
   const [message, setMessage] = useState('');
   const [computerThinking, setComputerThinking] = useState(false);
 
-  const [whiteClock, setWhiteClock] = useState(MATCH_CLOCK_SECONDS);
-  const [blackClock, setBlackClock] = useState(MATCH_CLOCK_SECONDS);
+  const [whiteBank, setWhiteBank] = useState(MATCH_CLOCK_SECONDS);
+  const [blackBank, setBlackBank] = useState(MATCH_CLOCK_SECONDS);
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const forfeitRef = useRef(false);
   const stateRef = useRef(gameState);
   const computerThinkingRef = useRef(false);
   const computerGameSavedRef = useRef(false);
+  const aiRequestIdRef = useRef(0);
+  const aiWorkerRef = useRef<Worker | null>(null);
+  const turnStartedAtRef = useRef<number | null>(null);
   stateRef.current = gameState;
+  turnStartedAtRef.current = turnStartedAt;
 
   const computerColor: 'white' | 'black' = humanColor === 'white' ? 'black' : 'white';
 
   const resetClocks = useCallback(() => {
-    setWhiteClock(MATCH_CLOCK_SECONDS);
-    setBlackClock(MATCH_CLOCK_SECONDS);
+    setWhiteBank(MATCH_CLOCK_SECONDS);
+    setBlackBank(MATCH_CLOCK_SECONDS);
+    setTurnStartedAt(null);
+    turnStartedAtRef.current = null;
     forfeitRef.current = false;
   }, []);
+
+  const commitElapsedForTurn = useCallback((turn: 'white' | 'black', startedAt: number) => {
+    const elapsed = elapsedSecondsSince(startedAt);
+    if (turn === 'white') {
+      setWhiteBank(w => Math.max(0, w - elapsed));
+    } else {
+      setBlackBank(b => Math.max(0, b - elapsed));
+    }
+  }, []);
+
+  const startTurnClock = useCallback(() => {
+    const now = Date.now();
+    setTurnStartedAt(now);
+    turnStartedAtRef.current = now;
+  }, []);
+
+  const applyPlayingMove = useCallback(
+    (state: GameState, action: GameAction): GameState => {
+      const startedAt = turnStartedAtRef.current;
+      if (state.status === 'playing' && state.moveNumber >= 1 && startedAt != null) {
+        commitElapsedForTurn(state.currentTurn, startedAt);
+      }
+
+      const newState = applyAction(state, action);
+
+      if (newState.status === 'playing' && newState.moveNumber >= 1) {
+        startTurnClock();
+      } else {
+        setTurnStartedAt(null);
+        turnStartedAtRef.current = null;
+      }
+
+      return newState;
+    },
+    [commitElapsedForTurn, startTurnClock]
+  );
+
+  const clockedModes =
+    gameState.gameMode === 'imperial' || gameState.gameMode === 'traditional';
+
+  const clockPlaying =
+    clockedModes &&
+    gameState.status === 'playing' &&
+    gameState.moveNumber >= 1 &&
+    !forfeitRef.current;
+
+  const clockDisplay = useMemo(
+    () =>
+      localClockDisplay(
+        whiteBank,
+        blackBank,
+        gameState.currentTurn,
+        turnStartedAt,
+        clockNow,
+        clockPlaying
+      ),
+    [
+      whiteBank,
+      blackBank,
+      gameState.currentTurn,
+      turnStartedAt,
+      clockNow,
+      clockPlaying,
+    ]
+  );
+
+  useEffect(() => {
+    if (!clockPlaying) {
+      return undefined;
+    }
+    const id = window.setInterval(() => setClockNow(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, [clockPlaying]);
 
   const updateTurnStatus = useCallback(
     (state: GameState) => {
@@ -121,9 +204,23 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
       setComputerThinking(true);
       setMessage('Computador pensando...');
 
-      const thinkDelay = aiDifficulty === 'hard' ? 900 : aiDifficulty === 'medium' ? 700 : 500;
+      const requestId = ++aiRequestIdRef.current;
+      const worker = aiWorkerRef.current;
 
-      window.setTimeout(() => {
+      const finishThinking = () => {
+        if (requestId !== aiRequestIdRef.current) {
+          return;
+        }
+        computerThinkingRef.current = false;
+        setComputerThinking(false);
+      };
+
+      const applyComputerMove = (move: MoveIntent | null) => {
+        if (requestId !== aiRequestIdRef.current || forfeitRef.current) {
+          finishThinking();
+          return;
+        }
+
         const currentState = stateRef.current;
 
         if (
@@ -131,26 +228,17 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
           currentState.currentTurn !== computerColor ||
           opponentMode !== 'computer'
         ) {
-          computerThinkingRef.current = false;
-          setComputerThinking(false);
+          finishThinking();
           return;
         }
-
-        const move = chooseBestComputerMove(
-          currentState,
-          computerColor,
-          humanColor,
-          aiDifficulty
-        );
 
         if (!move) {
           setMessage('Computador nao possui movimentos validos.');
-          computerThinkingRef.current = false;
-          setComputerThinking(false);
+          finishThinking();
           return;
         }
 
-        const newState = applyAction(currentState, {
+        const newState = applyPlayingMove(currentState, {
           type: 'MOVE',
           payload: { move },
           playerColor: computerColor,
@@ -168,12 +256,49 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
           );
         }
 
-        computerThinkingRef.current = false;
-        setComputerThinking(false);
-      }, thinkDelay);
+        finishThinking();
+      };
+
+      if (worker) {
+        worker.onmessage = (event: MessageEvent<ComputerMoveResponse>) => {
+          applyComputerMove(event.data.move);
+        };
+        worker.onerror = () => {
+          finishThinking();
+          setMessage('Erro ao calcular jogada do computador.');
+        };
+
+        const payload: ComputerMoveRequest = {
+          state: serializeState(state),
+          computerColor,
+          humanColor,
+          difficulty: aiDifficulty,
+        };
+        worker.postMessage(payload);
+        return;
+      }
+
+      window.setTimeout(() => {
+        import('@princefall/game-ai').then(({ chooseBestComputerMove }) => {
+          const move = chooseBestComputerMove(state, computerColor, humanColor, aiDifficulty);
+          applyComputerMove(move);
+        });
+      }, 0);
     },
-    [aiDifficulty, computerColor, humanColor, opponentMode]
+    [aiDifficulty, applyPlayingMove, computerColor, humanColor, opponentMode]
   );
+
+  useEffect(() => {
+    const worker = new Worker(new URL('../workers/computerMove.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    aiWorkerRef.current = worker;
+    return () => {
+      aiRequestIdRef.current += 1;
+      worker.terminate();
+      aiWorkerRef.current = null;
+    };
+  }, []);
 
   const startMode = useCallback(
     (mode: LocalPlayChoice) => {
@@ -290,47 +415,26 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
     setMessage('');
   }, [humanColor, lastMode, opponentMode, resetClocks]);
 
-  const clockedModes =
-    gameState.gameMode === 'imperial' || gameState.gameMode === 'traditional';
-
   useEffect(() => {
-    if (!clockedModes || gameState.status !== 'playing') {
-      return undefined;
-    }
-    if (gameState.moveNumber < 1) {
-      return undefined;
-    }
-    if (forfeitRef.current) {
-      return undefined;
-    }
-    if (computerThinking) {
-      return undefined;
-    }
-
-    const id = window.setInterval(() => {
-      const s = stateRef.current;
-      if (s.status !== 'playing' || (s.gameMode !== 'imperial' && s.gameMode !== 'traditional')) {
-        return;
-      }
-      setWhiteClock(w => (s.currentTurn === 'white' ? Math.max(0, w - 1) : w));
-      setBlackClock(b => (s.currentTurn === 'black' ? Math.max(0, b - 1) : b));
-    }, 1000);
-
-    return () => window.clearInterval(id);
-  }, [clockedModes, computerThinking, gameState.status, gameState.gameMode, gameState.moveNumber]);
-
-  useEffect(() => {
-    if (!clockedModes || gameState.status !== 'playing') {
+    if (!clockPlaying) {
       return;
     }
-    if (gameState.moveNumber < 1 || forfeitRef.current) {
+    if (clockDisplay.white > 0 && clockDisplay.black > 0) {
       return;
     }
-    if (whiteClock > 0 && blackClock > 0) {
-      return;
-    }
-    const timedOut: 'white' | 'black' = whiteClock <= 0 ? 'white' : 'black';
+    const timedOut: 'white' | 'black' = clockDisplay.white <= 0 ? 'white' : 'black';
     forfeitRef.current = true;
+    aiRequestIdRef.current += 1;
+    computerThinkingRef.current = false;
+    setComputerThinking(false);
+
+    const startedAt = turnStartedAtRef.current;
+    if (startedAt != null) {
+      commitElapsedForTurn(gameState.currentTurn, startedAt);
+    }
+    setTurnStartedAt(null);
+    turnStartedAtRef.current = null;
+
     setGameState(s =>
       applyAction(s, {
         type: 'FORFEIT_ON_TIME',
@@ -339,7 +443,13 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
     );
     setSelectedPos(null);
     setSwapMode(false);
-  }, [whiteClock, blackClock, gameState.status, gameState.gameMode, gameState.moveNumber, clockedModes]);
+  }, [
+    clockDisplay.white,
+    clockDisplay.black,
+    clockPlaying,
+    commitElapsedForTurn,
+    gameState.currentTurn,
+  ]);
 
   useEffect(() => {
     if (opponentMode !== 'computer') {
@@ -364,8 +474,8 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
           {
             humanColor,
             gameState: serializeState(gameState),
-            whiteTimeMs: whiteClock * 1000,
-            blackTimeMs: blackClock * 1000,
+            whiteTimeMs: clockDisplay.white * 1000,
+            blackTimeMs: clockDisplay.black * 1000,
           },
           { token }
         );
@@ -382,8 +492,8 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
     token,
     humanColor,
     gameState,
-    whiteClock,
-    blackClock,
+    clockDisplay.white,
+    clockDisplay.black,
   ]);
 
   const handleSetupWhite = (pos: Position) => {
@@ -479,7 +589,7 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
         playerColor: gameState.currentTurn,
       };
 
-      const newState = applyAction(gameState, action);
+      const newState = applyPlayingMove(gameState, action);
       setGameState(newState);
       setSelectedPos(null);
 
@@ -569,7 +679,7 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
       playerColor: gameState.currentTurn,
     };
 
-    const newState = applyAction(gameState, action);
+    const newState = applyPlayingMove(gameState, action);
     setGameState(newState);
     setSelectedPos(null);
     setSwapMode(false);
@@ -612,14 +722,7 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
       ? getLegalMoves(gameState, selectedPos)
       : [];
 
-  const clockActive: 'white' | 'black' | null =
-    clockedModes &&
-    gameState.status === 'playing' &&
-    gameState.moveNumber >= 1 &&
-    !forfeitRef.current &&
-    !computerThinking
-      ? gameState.currentTurn
-      : null;
+  const clockActive: 'white' | 'black' | null = clockPlaying ? clockDisplay.active : null;
 
   if (menu) {
     return (
@@ -734,8 +837,8 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
                       ? `Sua vez. Selecione uma peca ${humanColor === 'white' ? 'branca' : 'preta'}.`
                       : 'Selecione uma peca.')
           }
-          whiteSeconds={whiteClock}
-          blackSeconds={blackClock}
+          whiteSeconds={clockDisplay.white}
+          blackSeconds={clockDisplay.black}
           clockActiveColor={clockActive}
           onReset={resetMatch}
           onBackToMenu={backToModeMenu}
