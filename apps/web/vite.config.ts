@@ -17,6 +17,7 @@ export default defineConfig({
       '@princefall/game-ai': path.join(monorepoRoot, 'packages/game-ai/src/index.ts'),
       '@princefall/shared': path.join(monorepoRoot, 'packages/shared/src/index.ts'),
     },
+    dedupe: ['@princefall/game-core'],
   },
   server: {
     port: 3000,
@@ -40,6 +41,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['@princefall/game-core', '@princefall/game-ai'],
+    include: ['@princefall/game-core'],
+    exclude: ['@princefall/game-ai'],
   },
 });

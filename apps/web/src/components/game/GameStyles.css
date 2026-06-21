@@ -339,6 +339,31 @@
   opacity: 0.85;
 }
 
+.difficulty-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 24px;
+  height: auto;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.difficulty-btn-title {
+  font-size: 1.05rem;
+  letter-spacing: 0.1em;
+}
+
+.difficulty-btn-desc {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 0.85;
+  max-width: 280px;
+}
+
 .game-layout {
   display: flex;
   flex-direction: column;

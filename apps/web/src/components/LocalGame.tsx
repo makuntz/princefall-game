@@ -14,11 +14,13 @@ import {
   chooseBestComputerMove,
   chooseComputerGeneralPosition,
   formatMoveDescription,
+  type AiDifficulty,
 } from '@princefall/game-ai';
 import { api } from '../api';
 import { ModeSelectionScreen, LocalPlayChoice } from './game/ModeSelectionScreen';
 import { OpponentSelectionScreen } from './game/OpponentSelectionScreen';
 import { ColorSelectionScreen } from './game/ColorSelectionScreen';
+import { DifficultySelectionScreen, aiDifficultyLabel } from './game/DifficultySelectionScreen';
 import { SetupScreen } from './game/SetupScreen';
 import { CoinflipScreen } from './game/CoinflipScreen';
 import { LocalChessBoard } from './game/LocalChessBoard';
@@ -30,7 +32,7 @@ import './game/GameStyles.css';
 const MATCH_CLOCK_SECONDS = 600;
 
 type OpponentMode = 'twoPlayers' | 'computer';
-type ImperialFlowStep = 'opponent' | 'color' | 'playing';
+type ImperialFlowStep = 'opponent' | 'color' | 'difficulty' | 'playing';
 
 function createImperialStateForComputer(humanColor: 'white' | 'black'): GameState {
   let state = createImperialInitialState();
@@ -53,6 +55,7 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
   const [imperialFlowStep, setImperialFlowStep] = useState<ImperialFlowStep>('opponent');
   const [opponentMode, setOpponentMode] = useState<OpponentMode>('twoPlayers');
   const [humanColor, setHumanColor] = useState<'white' | 'black'>('white');
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>('medium');
   const [gameState, setGameState] = useState<GameState>(createImperialInitialState());
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [swapMode, setSwapMode] = useState(false);
@@ -118,6 +121,8 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
       setComputerThinking(true);
       setMessage('Computador pensando...');
 
+      const thinkDelay = aiDifficulty === 'hard' ? 900 : aiDifficulty === 'medium' ? 700 : 500;
+
       window.setTimeout(() => {
         const currentState = stateRef.current;
 
@@ -131,7 +136,12 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
           return;
         }
 
-        const move = chooseBestComputerMove(currentState, computerColor, humanColor);
+        const move = chooseBestComputerMove(
+          currentState,
+          computerColor,
+          humanColor,
+          aiDifficulty
+        );
 
         if (!move) {
           setMessage('Computador nao possui movimentos validos.');
@@ -160,9 +170,9 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
 
         computerThinkingRef.current = false;
         setComputerThinking(false);
-      }, 600);
+      }, thinkDelay);
     },
-    [computerColor, humanColor, opponentMode]
+    [aiDifficulty, computerColor, humanColor, opponentMode]
   );
 
   const startMode = useCallback(
@@ -206,22 +216,33 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
     setImperialFlowStep('color');
   }, []);
 
+  const beginComputerGame = useCallback(
+    (color: 'white' | 'black', difficulty: AiDifficulty) => {
+      setHumanColor(color);
+      setAiDifficulty(difficulty);
+      setImperialFlowStep('playing');
+      setGameState(
+        color === 'black' ? createImperialStateForComputer('black') : createImperialInitialState()
+      );
+      setMessage(
+        color === 'white'
+          ? 'Brancas: escolham a posicao do General na linha 7.'
+          : 'Pretas: escolham a posicao do General na linha 3.'
+      );
+      setSelectedPos(null);
+      setSwapMode(false);
+    },
+    []
+  );
+
   const startComputerAsWhite = useCallback(() => {
     setHumanColor('white');
-    setImperialFlowStep('playing');
-    setGameState(createImperialInitialState());
-    setMessage('Brancas: escolham a posicao do General na linha 7.');
-    setSelectedPos(null);
-    setSwapMode(false);
+    setImperialFlowStep('difficulty');
   }, []);
 
   const startComputerAsBlack = useCallback(() => {
     setHumanColor('black');
-    setImperialFlowStep('playing');
-    setGameState(createImperialStateForComputer('black'));
-    setMessage('Pretas: escolham a posicao do General na linha 3.');
-    setSelectedPos(null);
-    setSwapMode(false);
+    setImperialFlowStep('difficulty');
   }, []);
 
   const backToModeMenu = useCallback(() => {
@@ -232,6 +253,7 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
     setImperialFlowStep('opponent');
     setOpponentMode('twoPlayers');
     setHumanColor('white');
+    setAiDifficulty('medium');
     computerThinkingRef.current = false;
     setComputerThinking(false);
     computerGameSavedRef.current = false;
@@ -621,6 +643,15 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
     );
   }
 
+  if (lastMode === 'imperial' && imperialFlowStep === 'difficulty') {
+    return (
+      <DifficultySelectionScreen
+        onSelect={level => beginComputerGame(humanColor, level)}
+        onBack={() => setImperialFlowStep('color')}
+      />
+    );
+  }
+
   if (lastMode === 'imperial' && imperialFlowStep === 'color') {
     return (
       <ColorSelectionScreen
@@ -675,7 +706,9 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
       <h1 className="game-play-title">
         {gameState.gameMode === 'imperial' ? 'XADREZ IMPERIAL' : 'XADREZ TRADICIONAL'}
         {opponentMode === 'computer' && (
-          <span className="game-mode-badge"> vs Computador</span>
+          <span className="game-mode-badge">
+            vs Computador ({aiDifficultyLabel(aiDifficulty)})
+          </span>
         )}
       </h1>
 
