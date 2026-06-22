@@ -238,11 +238,17 @@ export function LocalGame({ onBack, token }: { onBack: () => void; token?: strin
           return;
         }
 
-        const newState = applyPlayingMove(currentState, {
-          type: 'MOVE',
-          payload: { move },
-          playerColor: computerColor,
-        });
+        const newState = move.isSwap
+          ? applyPlayingMove(currentState, {
+              type: 'SWAP_KING_PRINCE',
+              payload: { swapFrom: move.from, swapTo: move.to },
+              playerColor: computerColor,
+            })
+          : applyPlayingMove(currentState, {
+              type: 'MOVE',
+              payload: { move },
+              playerColor: computerColor,
+            });
 
         setGameState(newState);
         setSelectedPos(null);

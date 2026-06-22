@@ -76,6 +76,9 @@ export function chooseComputerGeneralPosition(color: Color): Position {
 }
 
 export function formatMoveDescription(move: MoveIntent): string {
+  if (move.isSwap) {
+    return `troca Rei–Princesa (${positionToString(move.from)} ↔ ${positionToString(move.to)})`;
+  }
   return `${positionToString(move.from)} → ${positionToString(move.to)}`;
 }
 
